@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: ocp-automation-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./vars:/app/vars
+      - ocp-logs:/tmp/ocp-logs
+      - ocp-automation:/app/automation:ro
+    environment:
+      - SITE_VARS_PATH=/app/vars/site.yml
+      - LOG_DIR=/tmp/ocp-logs
+      - AUTOMATION_DIR=/app/automation
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: ocp-automation-ui
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  ocp-logs:
+  ocp-automation:
