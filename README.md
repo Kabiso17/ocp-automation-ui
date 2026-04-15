@@ -30,19 +30,41 @@ docker compose up -d
 
 ### 本地開發
 
-**Backend:**
+**前置需求：** Python 3.11+、Node.js 20+
+
+**1. 建立 vars 目錄**
 ```bash
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+mkdir -p vars
 ```
 
-**Frontend:**
+**2. Backend:**
+```bash
+cd backend
+
+# 建立並啟動 Python 虛擬環境
+python3 -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
+
+pip install -r requirements.txt
+
+# 設定 SITE_VARS_PATH 指向專案根目錄的 vars/site.yml
+SITE_VARS_PATH=../vars/site.yml uvicorn main:app --reload --port 8000
+```
+
+> Windows PowerShell 的話要分開設定環境變數：
+> ```powershell
+> $env:SITE_VARS_PATH = "..\vars\site.yml"
+> uvicorn main:app --reload --port 8000
+> ```
+
+**3. Frontend（另開一個終端機）:**
 ```bash
 cd frontend
 npm install
 npm run dev   # http://localhost:3000
 ```
+
+> Frontend 的 `vite.config.ts` 已設定 proxy，`/api` 請求會自動轉到 `localhost:8000`，不需要額外設定。
 
 ## API 文件
 
