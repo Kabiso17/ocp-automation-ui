@@ -116,6 +116,19 @@ export interface PhaseInfo {
   description: string
 }
 
+// ──────────────────────────────────────────
+// oc-mirror 下載相關 Types
+// ──────────────────────────────────────────
+
+export interface MirrorStatus {
+  status: 'idle' | 'running' | 'success' | 'failed'
+  started_at: string | null
+  finished_at: string | null
+  exit_code: number | null
+  log_lines: number
+  command: string | null
+}
+
 export const PHASES: PhaseInfo[] = [
   {
     key: 'prep',

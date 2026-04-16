@@ -60,3 +60,17 @@ export const removeOperator = (operator_name: string, catalog_tag: string = 'v4.
 
 export const exportImagesetYaml = () =>
   api.get<{ yaml: string }>('/api/imageset/export')
+
+// Mirror (oc-mirror 下載)
+export const getMirrorStatus = () =>
+  api.get<import('../types').MirrorStatus>('/api/mirror/status')
+
+export const startMirrorDownload = (destination: string, workspace: string = '/tmp/oc-mirror-workspace') =>
+  api.post<{ message: string; destination: string }>(
+    '/api/mirror/run',
+    { destination, workspace },
+    { timeout: 0 },
+  )
+
+export const resetMirror = () =>
+  api.delete<{ message: string }>('/api/mirror/reset')

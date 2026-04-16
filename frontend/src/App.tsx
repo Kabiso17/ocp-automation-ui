@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import Configuration from './pages/Configuration'
 import Phases from './pages/Phases'
 import ImagesetManager from './pages/ImagesetManager'
+import OperatorDownload from './pages/OperatorDownload'
 import { checkHealth } from './api/client'
 
 export default function App() {
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="config" element={<Configuration />} />
           <Route path="phases" element={<Phases />} />
           <Route path="imageset" element={<ImagesetManager />} />
+          <Route path="operator-download" element={<OperatorDownload />} />
         </Route>
       </Routes>
     </BrowserRouter>

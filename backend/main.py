@@ -7,6 +7,7 @@ from models import (
     SiteConfig, PhaseStatus, ValidationResult,
     OperatorSearchRequest, OperatorSearchResult,
     AddOperatorRequest, RemoveOperatorRequest,
+    MirrorRunRequest, MirrorStatus,
 )
 from config import read_config, write_config, validate_config
 from runner import run_phase, phase_states, log_generator, VALID_PHASES
@@ -14,6 +15,7 @@ from imageset import (
     read_imageset, write_imageset,
     search_operator, add_or_update_operator, remove_operator,
 )
+from mirror_runner import run_oc_mirror, mirror_state, mirror_log_generator
 
 app = FastAPI(
     title="OCP Automation API",
@@ -176,6 +178,56 @@ def export_imageset_yaml():
     data = read_imageset()
     raw = _yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False)
     return {"yaml": raw}
+
+
+# ──────────────────────────────────────────
+# oc-mirror 下載
+# ──────────────────────────────────────────
+
+@app.post("/api/mirror/run", status_code=202)
+async def start_mirror_download(req: MirrorRunRequest, background_tasks: BackgroundTasks):
+    """啟動 oc-mirror 下載流程。"""
+    if mirror_state["status"] == "running":
+        raise HTTPException(status_code=409, detail="oc-mirror 正在執行中，請等待完成後再試")
+    background_tasks.add_task(run_oc_mirror, req.destination, req.workspace)
+    return {"message": "oc-mirror 下載已開始", "destination": req.destination}
+
+
+@app.get("/api/mirror/status", response_model=MirrorStatus)
+def get_mirror_status():
+    """取得 oc-mirror 執行狀態。"""
+    return mirror_state
+
+
+@app.get("/api/mirror/logs")
+async def stream_mirror_logs():
+    """SSE：串流 oc-mirror log。"""
+    return StreamingResponse(
+        mirror_log_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.delete("/api/mirror/reset")
+def reset_mirror_status():
+    """重置 oc-mirror 狀態（不可在執行中呼叫）。"""
+    if mirror_state["status"] == "running":
+        raise HTTPException(status_code=409, detail="oc-mirror 正在執行中，無法重置")
+    mirror_state.update(
+        {
+            "status": "idle",
+            "started_at": None,
+            "finished_at": None,
+            "exit_code": None,
+            "log_lines": 0,
+            "command": None,
+        }
+    )
+    return {"message": "oc-mirror 狀態已重置"}
 
 
 # ──────────────────────────────────────────

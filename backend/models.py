@@ -126,3 +126,21 @@ class AddOperatorRequest(BaseModel):
 class RemoveOperatorRequest(BaseModel):
     operator_name: str
     catalog_tag: str = "v4.20"
+
+
+# ──────────────────────────────────────────
+# oc-mirror 下載相關 Models
+# ──────────────────────────────────────────
+
+class MirrorRunRequest(BaseModel):
+    destination: str  # e.g. docker://registry:5000 or file:///output/path
+    workspace: str = "/tmp/oc-mirror-workspace"
+
+
+class MirrorStatus(BaseModel):
+    status: str  # idle | running | success | failed
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    exit_code: Optional[int] = None
+    log_lines: int = 0
+    command: Optional[str] = None
