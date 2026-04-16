@@ -2,7 +2,8 @@
 # ============================================================
 # OCP Automation UI — 啟動腳本
 # 用途：啟動 API 服務（同時提供 Web UI）
-# 使用方式：bash start.sh
+# 使用方式：bash /root/ocp-automation-ui/start.sh
+#           或從 setup.sh 建立的捷徑：bash /root/start-ocp.sh
 # 停止服務：按 Ctrl+C
 # ============================================================
 
@@ -29,16 +30,32 @@ echo ""
 
 # ── 前置確認 ──
 if [ ! -d "$VENV_DIR" ]; then
-    err "尚未執行初次設定，請先執行：bash setup.sh"
+    err "尚未執行初次設定，請先執行：bash $SCRIPT_DIR/setup.sh"
 fi
 
 if [ ! -d "$SCRIPT_DIR/frontend/dist" ]; then
     warn "前端尚未建置（UI 可能無法顯示）"
-    warn "如需建置請執行：bash setup.sh"
+    warn "如需建置請執行：bash $SCRIPT_DIR/setup.sh"
 fi
 
 # ── 建立必要目錄 ──
 mkdir -p "$VARS_DIR" "$LOGS_DIR"
+
+# ── 開放防火牆 port ──
+if command -v firewall-cmd &>/dev/null; then
+    if firewall-cmd --list-ports 2>/dev/null | grep -q "${PORT}/tcp"; then
+        log "防火牆 port ${PORT} 已開放"
+    else
+        step "開放防火牆 port ${PORT}..."
+        if firewall-cmd --add-port="${PORT}/tcp" --permanent 2>/dev/null && \
+           firewall-cmd --reload 2>/dev/null; then
+            log "防火牆 port ${PORT} 已開放"
+        else
+            warn "無法設定防火牆（可能需要 root 權限），請手動執行："
+            warn "  firewall-cmd --add-port=${PORT}/tcp --permanent && firewall-cmd --reload"
+        fi
+    fi
+fi
 
 # ── 取得本機 IP ──
 HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")

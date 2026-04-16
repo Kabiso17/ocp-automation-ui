@@ -108,7 +108,6 @@ clone 完成後的目錄結構：
 ```bash
 cd /root
 git clone https://github.com/Kabiso17/ocp-automation-ui.git
-cd ocp-automation-ui
 ```
 
 ### 2.5 放入 Pull Secret
@@ -132,7 +131,7 @@ cat /root/pull-secret | python3 -m json.tool | head -3
 ### 2.6 執行初次設定
 
 ```bash
-bash setup.sh
+bash /root/ocp-automation-ui/setup.sh
 ```
 
 `setup.sh` 會自動依序執行：
@@ -165,8 +164,10 @@ bash setup.sh
 
 ### 2.7 啟動管理介面
 
+setup.sh 完成後會在 `/root/` 建立捷徑 `start-ocp.sh`，之後每次啟動用這個：
+
 ```bash
-bash start.sh
+bash /root/start-ocp.sh
 ```
 
 ### 2.8 開啟瀏覽器
@@ -456,11 +457,11 @@ oc get csr -o go-template='{{range .items}}{{if not .status}}{{.metadata.name}}{
 ## 附錄 A：指令速查
 
 ```bash
-# 初次設定
-cd /root/ocp-automation-ui && bash setup.sh
+# 初次設定（只需執行一次）
+bash /root/ocp-automation-ui/setup.sh
 
-# 啟動管理介面
-cd /root/ocp-automation-ui && bash start.sh
+# 啟動管理介面（之後每次用這個）
+bash /root/start-ocp.sh
 
 # 確認叢集狀態
 export KUBECONFIG=/root/ocp4/auth/kubeconfig

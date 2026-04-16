@@ -36,14 +36,14 @@ OpenShift 自動化安裝管理介面。
 
 ```bash
 # 1. Clone 管理介面
+cd /root
 git clone https://github.com/Kabiso17/ocp-automation-ui.git
-cd ocp-automation-ui
 
-# 2. 初次設定（自動 clone 所需 repo、建立環境、建置前端，約 3～5 分鐘）
-bash setup.sh
+# 2. 初次設定（自動 clone 所需 repo、建環境、build 前端、建立 /root/start-ocp.sh 捷徑）
+bash /root/ocp-automation-ui/setup.sh
 
-# 3. 啟動
-bash start.sh
+# 3. 啟動（之後每次用這個）
+bash /root/start-ocp.sh
 ```
 
 然後在瀏覽器開啟：`http://<Bastion的IP>:8000`

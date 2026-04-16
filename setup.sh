@@ -136,7 +136,24 @@ echo "    UI 程式：        $SCRIPT_DIR"
 echo "    Ansible 入口：   $AUTOMATION_DIR"
 echo "    Ansible Roles：  $OCP_ROLES_DIR"
 echo ""
-echo "  下一步：執行 bash start.sh"
+
+# ── 在 /root/ 建立啟動捷徑 ──
+SHORTCUT="/root/start-ocp.sh"
+if [ "$(id -u)" = "0" ]; then
+    cat > "$SHORTCUT" << EOF
+#!/bin/bash
+exec bash "$SCRIPT_DIR/start.sh" "\$@"
+EOF
+    chmod +x "$SHORTCUT"
+    log "已建立啟動捷徑：$SHORTCUT"
+    echo ""
+    echo "  啟動方式（擇一）："
+    echo "    bash /root/start-ocp.sh"
+    echo "    bash $SCRIPT_DIR/start.sh"
+else
+    echo "  下一步：執行 bash start.sh"
+fi
+
 echo "  然後開啟瀏覽器：http://$(hostname -I | awk '{print $1}' 2>/dev/null || echo 'localhost'):8000"
 echo "============================================"
 echo ""
