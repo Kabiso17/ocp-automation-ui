@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Settings, Play, Server } from 'lucide-react'
+import { LayoutDashboard, Settings, Play, Server, Package } from 'lucide-react'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/config', label: '配置', icon: Settings },
   { to: '/phases', label: '執行', icon: Play },
+  { to: '/imageset', label: 'ImageSet', icon: Package },
 ]
 
 interface SidebarProps {

@@ -60,6 +60,53 @@ export interface ValidationResult {
   errors: string[]
 }
 
+// ──────────────────────────────────────────
+// ImageSet 相關 Types
+// ──────────────────────────────────────────
+
+export interface ImagesetChannel {
+  name: string
+  minVersion: string
+  maxVersion: string
+}
+
+export interface ImagesetPackage {
+  name: string
+  channels: ImagesetChannel[]
+}
+
+export interface ImagesetCatalogEntry {
+  catalog: string
+  packages: ImagesetPackage[]
+}
+
+export interface ImagesetConfig {
+  apiVersion: string
+  kind: string
+  archiveSize: number
+  mirror: {
+    platform?: {
+      channels: { name: string; minVersion: string; maxVersion: string }[]
+      graph: boolean
+    }
+    operators: ImagesetCatalogEntry[]
+    additionalImages: { name: string }[]
+  }
+}
+
+export interface OperatorChannelResult {
+  channel: string
+  head_version: string
+  head_bundle: string
+}
+
+export interface OperatorSearchResult {
+  success: boolean
+  error?: string
+  raw?: string
+  channels: OperatorChannelResult[]
+}
+
 export type PhaseKey = 'prep' | 'install' | 'post' | 'operators'
 
 export interface PhaseInfo {

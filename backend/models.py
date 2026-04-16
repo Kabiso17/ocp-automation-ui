@@ -91,3 +91,38 @@ class PhaseStatus(BaseModel):
 class ValidationResult(BaseModel):
     valid: bool
     errors: List[str] = []
+
+
+# ──────────────────────────────────────────
+# ImageSet 相關 Models
+# ──────────────────────────────────────────
+
+class OperatorChannelResult(BaseModel):
+    channel: str
+    head_version: str
+    head_bundle: str
+
+
+class OperatorSearchResult(BaseModel):
+    success: bool
+    error: Optional[str] = None
+    raw: Optional[str] = None
+    channels: List[OperatorChannelResult] = []
+
+
+class OperatorSearchRequest(BaseModel):
+    operator_name: str
+    ocp_version: str = "4.20"
+    image_timeout: str = "30m"
+
+
+class AddOperatorRequest(BaseModel):
+    operator_name: str
+    channel: str
+    version: str
+    catalog_tag: str = "v4.20"
+
+
+class RemoveOperatorRequest(BaseModel):
+    operator_name: str
+    catalog_tag: str = "v4.20"

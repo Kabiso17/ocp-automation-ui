@@ -56,6 +56,7 @@ echo ""
 SITE_VARS_PATH="$VARS_DIR/site.yml" \
 AUTOMATION_DIR="$AUTOMATION_DIR" \
 LOG_DIR="$LOGS_DIR" \
+IMAGESET_PATH="$AUTOMATION_DIR/yaml/imageset-config.yaml" \
     "$VENV_DIR/bin/uvicorn" main:app \
     --host 0.0.0.0 \
     --port "$PORT" \

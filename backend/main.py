@@ -3,9 +3,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
-from models import SiteConfig, PhaseStatus, ValidationResult
+from models import (
+    SiteConfig, PhaseStatus, ValidationResult,
+    OperatorSearchRequest, OperatorSearchResult,
+    AddOperatorRequest, RemoveOperatorRequest,
+)
 from config import read_config, write_config, validate_config
 from runner import run_phase, phase_states, log_generator, VALID_PHASES
+from imageset import (
+    read_imageset, write_imageset,
+    search_operator, add_or_update_operator, remove_operator,
+)
 
 app = FastAPI(
     title="OCP Automation API",
@@ -104,6 +112,70 @@ def reset_phase(phase: str):
         "log_lines": 0,
     }
     return {"message": f"Phase '{phase}' 已重置"}
+
+
+# ──────────────────────────────────────────
+# ImageSet 管理
+# ──────────────────────────────────────────
+
+@app.get("/api/imageset")
+def get_imageset():
+    """讀取 imageset-config.yaml"""
+    return read_imageset()
+
+
+@app.put("/api/imageset")
+def put_imageset(data: dict):
+    """直接覆寫整個 imageset-config.yaml（進階用法）"""
+    write_imageset(data)
+    return {"message": "imageset-config.yaml 已儲存"}
+
+
+@app.post("/api/imageset/operators/search", response_model=OperatorSearchResult)
+async def search_operator_versions(req: OperatorSearchRequest):
+    """
+    呼叫 oc-mirror list operators 查詢指定 operator 的頻道與版本。
+    使用 --image-timeout 避免拉取 catalog index 時 timeout。
+    """
+    result = await search_operator(
+        operator_name=req.operator_name,
+        ocp_version=req.ocp_version,
+        image_timeout=req.image_timeout,
+    )
+    return result
+
+
+@app.post("/api/imageset/operators/add")
+def add_operator_to_imageset(req: AddOperatorRequest):
+    """在 imageset 中新增或更新一個 operator。"""
+    imageset = read_imageset()
+    updated = add_or_update_operator(
+        imageset,
+        operator_name=req.operator_name,
+        channel=req.channel,
+        version=req.version,
+        catalog_tag=req.catalog_tag,
+    )
+    write_imageset(updated)
+    return {"message": f"Operator '{req.operator_name}' 已加入 imageset"}
+
+
+@app.delete("/api/imageset/operators/{operator_name}")
+def delete_operator_from_imageset(operator_name: str, catalog_tag: str = "v4.20"):
+    """從 imageset 移除指定 operator。"""
+    imageset = read_imageset()
+    updated = remove_operator(imageset, operator_name, catalog_tag)
+    write_imageset(updated)
+    return {"message": f"Operator '{operator_name}' 已從 imageset 移除"}
+
+
+@app.get("/api/imageset/export")
+def export_imageset_yaml():
+    """以原始 YAML 文字回傳 imageset-config.yaml（方便複製）"""
+    import yaml as _yaml
+    data = read_imageset()
+    raw = _yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    return {"yaml": raw}
 
 
 # ──────────────────────────────────────────

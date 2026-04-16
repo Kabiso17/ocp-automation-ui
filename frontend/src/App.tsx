@@ -4,6 +4,7 @@ import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Configuration from './pages/Configuration'
 import Phases from './pages/Phases'
+import ImagesetManager from './pages/ImagesetManager'
 import { checkHealth } from './api/client'
 
 export default function App() {
@@ -30,6 +31,7 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="config" element={<Configuration />} />
           <Route path="phases" element={<Phases />} />
+          <Route path="imageset" element={<ImagesetManager />} />
         </Route>
       </Routes>
     </BrowserRouter>
