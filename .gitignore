@@ -1,0 +1,21 @@
+# Python
+backend/venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Frontend build
+frontend/node_modules/
+frontend/dist/
+
+# Runtime
+vars/site.yml
+logs/
+*.log
+
+# Automation (cloned by setup.sh)
+automation/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,10 +1,11 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 from models import SiteConfig, PhaseStatus, ValidationResult
 from config import read_config, write_config, validate_config
 from runner import run_phase, phase_states, log_generator, VALID_PHASES
-import asyncio
 
 app = FastAPI(
     title="OCP Automation API",
@@ -103,3 +104,19 @@ def reset_phase(phase: str):
         "log_lines": 0,
     }
     return {"message": f"Phase '{phase}' 已重置"}
+
+
+# ──────────────────────────────────────────
+# Serve Frontend (SPA)
+# 必須放在所有 /api 路由之後
+# ──────────────────────────────────────────
+_frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
+
+if _frontend_dist.exists():
+    # Serve static assets (JS, CSS, images)
+    app.mount("/assets", StaticFiles(directory=str(_frontend_dist / "assets")), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        """SPA fallback: 所有非 /api 路徑都回傳 index.html"""
+        return FileResponse(str(_frontend_dist / "index.html"))

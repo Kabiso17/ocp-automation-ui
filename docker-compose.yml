@@ -1,30 +1,36 @@
 version: '3.8'
 
+# ============================================================
+# OCP Automation UI — Docker Compose
+# 使用方式：docker compose up -d
+# UI 位址：http://localhost:8000
+# ============================================================
+# 注意：使用 Docker 方式時，ansible-navigator 需要掛載到容器內
+#       建議在安裝 ansible-navigator 的 RHEL Bastion 上使用
+#       或直接使用 start.sh（不需要 Docker）
+# ============================================================
+
 services:
-  backend:
-    build: ./backend
-    container_name: ocp-automation-api
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ocp-automation
     ports:
       - "8000:8000"
     volumes:
+      # 配置檔（site.yml 由 UI 寫入）
       - ./vars:/app/vars
-      - ocp-logs:/tmp/ocp-logs
-      - ocp-automation:/app/automation:ro
+      # 執行 Log
+      - ./logs:/app/logs
+      # Ansible playbooks（需要先執行 setup.sh 或手動 clone）
+      - ./automation:/app/automation:ro
+      # 讓容器內可以使用 host 的 ansible-navigator（若已安裝）
+      - /usr/local/bin/ansible-navigator:/usr/local/bin/ansible-navigator:ro
+      - /usr/bin/ansible-navigator:/usr/bin/ansible-navigator:ro
     environment:
       - SITE_VARS_PATH=/app/vars/site.yml
-      - LOG_DIR=/tmp/ocp-logs
+      - LOG_DIR=/app/logs
       - AUTOMATION_DIR=/app/automation
+    network_mode: host  # 讓容器可以連到 Bastion 本機的服務
     restart: unless-stopped
-
-  frontend:
-    build: ./frontend
-    container_name: ocp-automation-ui
-    ports:
-      - "3000:80"
-    depends_on:
-      - backend
-    restart: unless-stopped
-
-volumes:
-  ocp-logs:
-  ocp-automation:
