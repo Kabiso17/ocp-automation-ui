@@ -6,6 +6,7 @@ imageset.py
 
 import os
 import asyncio
+import subprocess
 import re
 from pathlib import Path
 from typing import List, Optional
@@ -83,13 +84,16 @@ async def search_operator(
         f"--package={operator_name}",
     ]
 
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+    def _run() -> subprocess.CompletedProcess:
+        return subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
-        stdout, stderr = await proc.communicate()
+
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, _run)
     except FileNotFoundError:
         return {
             "success": False,
@@ -97,10 +101,10 @@ async def search_operator(
             "channels": [],
         }
 
-    out = stdout.decode("utf-8", errors="replace")
-    err = stderr.decode("utf-8", errors="replace")
+    out = result.stdout.decode("utf-8", errors="replace")
+    err = result.stderr.decode("utf-8", errors="replace")
 
-    if proc.returncode != 0:
+    if result.returncode != 0:
         return {
             "success": False,
             "error": err or "oc-mirror 執行失敗",

@@ -6,6 +6,8 @@ mirror_runner.py
 """
 
 import asyncio
+import subprocess
+import threading
 import os
 from datetime import datetime
 from pathlib import Path
@@ -25,7 +27,7 @@ mirror_state: Dict[str, Any] = {
     "command": None,
 }
 
-_mirror_process: Optional[asyncio.subprocess.Process] = None
+_mirror_thread: Optional[threading.Thread] = None
 
 
 def get_mirror_log_path() -> Path:
@@ -33,14 +35,61 @@ def get_mirror_log_path() -> Path:
     return MIRROR_LOG_FILE
 
 
+def _run_oc_mirror_sync(cmd: list, cmd_str: str, log_path: Path) -> None:
+    """在獨立執行緒中同步執行 oc-mirror，並把輸出逐行寫入 log 檔。"""
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+
+        with open(log_path, "a", encoding="utf-8") as log_file:
+            log_file.write(f"[INFO] 執行指令：{cmd_str}\n")
+            log_file.write(f"[INFO] 開始時間：{mirror_state['started_at']}\n\n")
+            log_file.flush()
+            line_count = 2
+
+            for raw_line in proc.stdout:
+                decoded = raw_line.decode("utf-8", errors="replace")
+                log_file.write(decoded)
+                log_file.flush()
+                line_count += 1
+                mirror_state["log_lines"] = line_count
+
+        proc.wait()
+        exit_code = proc.returncode
+        mirror_state.update(
+            {
+                "status": "success" if exit_code == 0 else "failed",
+                "finished_at": datetime.now().isoformat(),
+                "exit_code": exit_code,
+            }
+        )
+
+    except FileNotFoundError:
+        mirror_state.update(
+            {"status": "failed", "finished_at": datetime.now().isoformat(), "exit_code": -1}
+        )
+        with open(log_path, "a", encoding="utf-8") as log_file:
+            log_file.write("[ERROR] 找不到 oc-mirror，請確認已安裝並在 PATH 中。\n")
+
+    except Exception as exc:
+        mirror_state.update(
+            {"status": "failed", "finished_at": datetime.now().isoformat(), "exit_code": -1}
+        )
+        with open(log_path, "a", encoding="utf-8") as log_file:
+            log_file.write(f"\n[ERROR] {exc}\n")
+
+
 async def run_oc_mirror(destination: str, workspace: str = "/tmp/oc-mirror-workspace") -> None:
     """
-    執行 oc-mirror 將 imageset-config.yaml 中設定的映像同步到目標。
+    背景執行 oc-mirror（透過執行緒，相容 Windows asyncio）。
 
     destination: docker://registry:5000 或 file:///output/path
     workspace:   oc-mirror v2 工作目錄（--workspace）
     """
-    global _mirror_process
+    global _mirror_thread
 
     log_path = get_mirror_log_path()
     log_path.write_text("")
@@ -64,62 +113,8 @@ async def run_oc_mirror(destination: str, workspace: str = "/tmp/oc-mirror-works
         }
     )
 
-    try:
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-        )
-        _mirror_process = process
-
-        with open(log_path, "a") as log_file:
-            log_file.write(f"[INFO] 執行指令：{cmd_str}\n")
-            log_file.write(f"[INFO] 開始時間：{mirror_state['started_at']}\n\n")
-            log_file.flush()
-            line_count = 2
-
-            async for line in process.stdout:
-                decoded = line.decode("utf-8", errors="replace")
-                log_file.write(decoded)
-                log_file.flush()
-                line_count += 1
-                mirror_state["log_lines"] = line_count
-
-        await process.wait()
-        exit_code = process.returncode
-
-        mirror_state.update(
-            {
-                "status": "success" if exit_code == 0 else "failed",
-                "finished_at": datetime.now().isoformat(),
-                "exit_code": exit_code,
-            }
-        )
-
-    except FileNotFoundError:
-        mirror_state.update(
-            {
-                "status": "failed",
-                "finished_at": datetime.now().isoformat(),
-                "exit_code": -1,
-            }
-        )
-        with open(log_path, "a") as log_file:
-            log_file.write("[ERROR] 找不到 oc-mirror，請確認已安裝並在 PATH 中。\n")
-
-    except Exception as exc:
-        mirror_state.update(
-            {
-                "status": "failed",
-                "finished_at": datetime.now().isoformat(),
-                "exit_code": -1,
-            }
-        )
-        with open(log_path, "a") as log_file:
-            log_file.write(f"\n[ERROR] {exc}\n")
-
-    finally:
-        _mirror_process = None
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, _run_oc_mirror_sync, cmd, cmd_str, log_path)
 
 
 async def mirror_log_generator():
