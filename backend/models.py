@@ -115,6 +115,7 @@ class OperatorSearchRequest(BaseModel):
     ocp_version: str = "4.20"
     image_timeout: str = "30m"  # 保留欄位避免破壞相容性，不傳給 oc-mirror
     pull_secret: str = "/root/pull-secret"
+    force_refresh: bool = False
 
 
 class AddOperatorRequest(BaseModel):

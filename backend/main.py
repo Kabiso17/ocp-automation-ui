@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
+from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -17,6 +18,7 @@ from imageset import (
     list_catalog_operators,
 )
 from mirror_runner import run_oc_mirror, mirror_state, mirror_log_generator
+from operator_cache import get_stats, clear_cache
 from tools import (
     get_tools_status, start_tool_download,
     tools_log_generator, download_state, TOOL_DEFS,
@@ -142,12 +144,24 @@ def put_imageset(data: dict):
 async def get_catalog_operators(
     ocp_version: str = "4.20",
     pull_secret: str = "/root/pull-secret",
+    force_refresh: bool = False,
 ):
-    """
-    列出指定 catalog 中所有可用的 Operators（oc-mirror --v1 list operators）。
-    需提供 Pull Secret 路徑以存取 registry.redhat.io。
-    """
-    return await list_catalog_operators(ocp_version, pull_secret)
+    """列出指定 catalog 所有可用 Operators。優先回傳快取；force_refresh=true 強制重新查詢。"""
+    return await list_catalog_operators(ocp_version, pull_secret, force_refresh)
+
+
+@app.get("/api/operators/cache")
+def get_operator_cache():
+    """取得本地快取統計（catalog 快取數、package 快取數、各筆快取時間）。"""
+    return get_stats()
+
+
+@app.delete("/api/operators/cache")
+def delete_operator_cache(ocp_version: Optional[str] = None):
+    """清除快取。ocp_version 指定時只清該版本，否則清除全部。"""
+    count = clear_cache(ocp_version)
+    msg = f"已清除 {count} 筆快取" + (f"（v{ocp_version}）" if ocp_version else "（全部）")
+    return {"message": msg, "deleted": count}
 
 
 @app.post("/api/imageset/operators/search", response_model=OperatorSearchResult)
@@ -160,6 +174,7 @@ async def search_operator_versions(req: OperatorSearchRequest):
         operator_name=req.operator_name,
         ocp_version=req.ocp_version,
         pull_secret=req.pull_secret,
+        force_refresh=req.force_refresh,
     )
     return result
 
