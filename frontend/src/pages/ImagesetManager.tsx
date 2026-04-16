@@ -588,6 +588,8 @@ function CatalogBrowser({ catalogTag, pullSecret, onAdded }: {
   const [channelCache, setChannelCache] = useState<
     Record<string, { loading: boolean; channels: OperatorChannelResult[]; error?: string; from_cache?: boolean; cached_at?: string }>
   >({})
+  // 快速加入的每列狀態：idle | adding | added | error
+  const [quickAddState, setQuickAddState] = useState<Record<string, 'idle' | 'adding' | 'added' | 'error'>>({})
 
   const handleLoad = async (forceRefresh = false) => {
     setLoading(true)
@@ -603,6 +605,33 @@ function CatalogBrowser({ catalogTag, pullSecret, onAdded }: {
       setResult({ success: false, error: msg, total: 0, operators: [] })
     } finally {
       setLoading(false)
+    }
+  }
+
+  /**
+   * 快速加入：直接用 default_channel 加入 imageset，不需要展開頻道列表。
+   * 挑選邏輯：
+   *  1. 若已有 package 快取 → 找 head_version 並鎖版
+   *  2. 否則 → 只帶 channel 名稱，不鎖版（oc-mirror 自動取最新）
+   */
+  const handleQuickAdd = async (op: CatalogOperator) => {
+    setQuickAddState(prev => ({ ...prev, [op.name]: 'adding' }))
+    try {
+      // 從 channelCache 取已知 head_version（若有）
+      const cached = channelCache[op.name]
+      let version = ''
+      if (cached && !cached.loading && cached.channels.length > 0) {
+        const best = cached.channels.find(c => c.channel === op.default_channel)
+          ?? cached.channels.find(c => c.channel.includes('stable'))
+          ?? cached.channels[0]
+        version = best?.head_version ?? ''
+      }
+      await addOperator(op.name, op.default_channel, version, catalogTag)
+      setQuickAddState(prev => ({ ...prev, [op.name]: 'added' }))
+      onAdded()
+    } catch {
+      setQuickAddState(prev => ({ ...prev, [op.name]: 'error' }))
+      setTimeout(() => setQuickAddState(prev => ({ ...prev, [op.name]: 'idle' })), 3000)
     }
   }
 
@@ -776,19 +805,45 @@ function CatalogBrowser({ catalogTag, pullSecret, onAdded }: {
                           </td>
                           {/* 操作 */}
                           <td className="px-4 py-2.5 align-top text-right">
-                            <button
-                              onClick={() => handleExpandRow(op.name)}
-                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                                expanded === op.name
-                                  ? 'bg-ocp-red/20 text-ocp-red border border-ocp-red/40'
-                                  : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
-                              }`}
-                            >
-                              {expanded === op.name
-                                ? <><ChevronUp size={11} />收起</>
-                                : <><Plus size={11} />加入</>
-                              }
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              {/* 快速加入 */}
+                              {(() => {
+                                const st = quickAddState[op.name] ?? 'idle'
+                                return (
+                                  <button
+                                    onClick={() => handleQuickAdd(op)}
+                                    disabled={st === 'adding' || st === 'added'}
+                                    title={`快速加入（channel: ${op.default_channel}）`}
+                                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                                      st === 'added'
+                                        ? 'bg-green-800/40 text-green-300 cursor-default'
+                                        : st === 'error'
+                                        ? 'bg-red-800/40 text-red-300'
+                                        : st === 'adding'
+                                        ? 'bg-slate-700 text-slate-400 cursor-wait'
+                                        : 'bg-ocp-red/80 hover:bg-ocp-red text-white'
+                                    }`}
+                                  >
+                                    {st === 'added' ? <><Check size={11} />已加入</>
+                                      : st === 'adding' ? <><RefreshCw size={11} className="animate-spin" />加入中</>
+                                      : st === 'error' ? <>✗ 失敗</>
+                                      : <><Plus size={11} />加入</>}
+                                  </button>
+                                )
+                              })()}
+                              {/* 查看頻道詳細 */}
+                              <button
+                                onClick={() => handleExpandRow(op.name)}
+                                title="查看所有頻道與版本"
+                                className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                                  expanded === op.name
+                                    ? 'bg-slate-600 text-white'
+                                    : 'bg-slate-700/60 hover:bg-slate-600 text-slate-400 hover:text-white'
+                                }`}
+                              >
+                                {expanded === op.name ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}

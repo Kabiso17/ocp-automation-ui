@@ -48,6 +48,10 @@
 
 ## 已完成
 
+- [x] CatalogBrowser "+" 快速加入（用 default_channel，不鎖版本）
+- [x] CatalogBrowser 拆成「加入」和「▾ 查看頻道」兩個按鈕
+- [x] 啟動時背景自動預熱 catalog 快取（從 site.yml 讀取 ocp_version）
+- [x] add_or_update_operator 支援空版本（不鎖版本，oc-mirror 自動取最新）
 - [x] 新增 Operator 下載頁面（oc-mirror --v2 + SSE log）
 - [x] 新增 CLI 工具下載頁面（oc / oc-mirror / openshift-install）
 - [x] 修復 Windows asyncio 相容性（改用 subprocess + run_in_executor）

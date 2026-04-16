@@ -325,16 +325,38 @@ def _parse_catalog_list(output: str) -> List[dict]:
     return operators
 
 
+def _pick_best_channel(channels: List[dict], default_channel: str) -> Optional[dict]:
+    """
+    從 package 的頻道清單中挑選最佳頻道：
+    1. 優先使用 default_channel（與 catalog 清單的 default_channel 相符）
+    2. 其次找名稱含 'stable' 的頻道
+    3. 最後 fallback 到第一個頻道
+    回傳 {channel, head_version, head_bundle} 或 None
+    """
+    if not channels:
+        return None
+    # 完全符合 default_channel
+    for ch in channels:
+        if ch.get("channel") == default_channel:
+            return ch
+    # 包含 stable
+    for ch in channels:
+        if "stable" in ch.get("channel", ""):
+            return ch
+    return channels[0]
+
+
 def add_or_update_operator(
     imageset: dict,
     operator_name: str,
     channel: str,
-    version: str,
+    version: str = "",
     catalog_tag: str = "v4.20",
 ) -> dict:
     """
     在 imageset dict 中新增或更新一個 operator package。
-    如果同名 operator 已存在則覆蓋其 channel 設定。
+    version 為空字串時不鎖定版本（oc-mirror 自動取最新），
+    適合「快速加入」場景。
     """
     catalog_url = f"registry.redhat.io/redhat/redhat-operator-index:{catalog_tag}"
     operators_list: List[dict] = imageset["mirror"].get("operators", [])
@@ -353,25 +375,28 @@ def add_or_update_operator(
 
     packages: List[dict] = catalog_entry.get("packages", [])
 
+    # 建立 channel entry：version 為空則不鎖版本
+    if version:
+        new_channel: dict = {"name": channel, "minVersion": version, "maxVersion": version}
+    else:
+        new_channel = {"name": channel}
+
     # 找到同名 package
     pkg = next((p for p in packages if p["name"] == operator_name), None)
-    new_channel = {
-        "name": channel,
-        "minVersion": version,
-        "maxVersion": version,
-    }
 
     if pkg is None:
         packages.append({"name": operator_name, "channels": [new_channel]})
     else:
-        # 更新或新增 channel
         existing_channels = pkg.get("channels", [])
         ch = next((c for c in existing_channels if c["name"] == channel), None)
         if ch is None:
             existing_channels.append(new_channel)
         else:
-            ch["minVersion"] = version
-            ch["maxVersion"] = version
+            ch.pop("minVersion", None)
+            ch.pop("maxVersion", None)
+            if version:
+                ch["minVersion"] = version
+                ch["maxVersion"] = version
         pkg["channels"] = existing_channels
 
     catalog_entry["packages"] = packages
