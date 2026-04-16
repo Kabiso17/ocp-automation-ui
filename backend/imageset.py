@@ -74,10 +74,8 @@ async def search_operator(
     """
     catalog = f"registry.redhat.io/redhat/redhat-operator-index:v{ocp_version}"
 
-    cmd = ["oc-mirror"]
-    if pull_secret and Path(pull_secret).exists():
-        cmd.append(f"--registry-config={pull_secret}")
-    cmd += [
+    cmd = [
+        "oc-mirror",
         "list",
         "operators",
         f"--catalog={catalog}",
@@ -85,10 +83,14 @@ async def search_operator(
     ]
 
     def _run() -> subprocess.CompletedProcess:
+        env = dict(os.environ)
+        if pull_secret and Path(pull_secret).exists():
+            env["REGISTRY_AUTH_FILE"] = pull_secret
         return subprocess.run(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            env=env,
         )
 
     try:
@@ -177,20 +179,22 @@ async def list_catalog_operators(
     """
     catalog = f"registry.redhat.io/redhat/redhat-operator-index:v{ocp_version}"
 
-    cmd = ["oc-mirror"]
-    if pull_secret and Path(pull_secret).exists():
-        cmd.append(f"--registry-config={pull_secret}")
-    cmd += [
+    cmd = [
+        "oc-mirror",
         "list",
         "operators",
         f"--catalog={catalog}",
     ]
 
     def _run() -> subprocess.CompletedProcess:
+        env = dict(os.environ)
+        if pull_secret and Path(pull_secret).exists():
+            env["REGISTRY_AUTH_FILE"] = pull_secret
         return subprocess.run(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            env=env,
         )
 
     try:
