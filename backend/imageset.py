@@ -74,7 +74,7 @@ async def search_operator(
     """
     catalog = f"registry.redhat.io/redhat/redhat-operator-index:v{ocp_version}"
 
-    cmd = ["oc-mirror", "--v1"]
+    cmd = ["oc-mirror"]
     if pull_secret and Path(pull_secret).exists():
         cmd.append(f"--registry-config={pull_secret}")
     cmd += [
@@ -177,7 +177,7 @@ async def list_catalog_operators(
     """
     catalog = f"registry.redhat.io/redhat/redhat-operator-index:v{ocp_version}"
 
-    cmd = ["oc-mirror", "--v1"]
+    cmd = ["oc-mirror"]
     if pull_secret and Path(pull_secret).exists():
         cmd.append(f"--registry-config={pull_secret}")
     cmd += [

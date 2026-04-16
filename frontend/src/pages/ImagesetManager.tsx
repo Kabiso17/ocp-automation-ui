@@ -222,7 +222,7 @@ function SearchPanel({ catalogTag, pullSecret, onAdded }: {
             </select>
           </div>
           <div className="mt-2 text-xs text-slate-500">
-            對應指令：<code className="bg-slate-800 px-1 rounded">oc-mirror --v1 --registry-config={pullSecret} list operators --catalog=registry.redhat.io/redhat/redhat-operator-index:v{ocpVersion} --package={operatorName || '<name>'}</code>
+            對應指令：<code className="bg-slate-800 px-1 rounded">oc-mirror --registry-config={pullSecret} list operators --catalog=registry.redhat.io/redhat/redhat-operator-index:v{ocpVersion} --package={operatorName || '<name>'}</code>
           </div>
         </div>
       )}
@@ -508,11 +508,8 @@ function CatalogBrowser({ catalogTag, pullSecret, onAdded }: {
           <p className="mt-3 text-xs text-slate-500">
             對應指令：
             <code className="bg-slate-900 px-1 py-0.5 rounded font-mono">
-              oc-mirror --v1 --registry-config={pullSecret} list operators --catalog=registry.redhat.io/redhat/redhat-operator-index:v{ocpVersion}
+              oc-mirror --registry-config={pullSecret} list operators --catalog=registry.redhat.io/redhat/redhat-operator-index:v{ocpVersion}
             </code>
-          </p>
-          <p className="mt-1 text-xs text-yellow-600/80">
-            ⚠️ list operators 指令目前僅 oc-mirror v1 支援（v2 尚未提供對應功能）
           </p>
 
           {loading && (
