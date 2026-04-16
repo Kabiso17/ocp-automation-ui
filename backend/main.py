@@ -139,13 +139,15 @@ def put_imageset(data: dict):
 
 
 @app.get("/api/operators/catalog")
-async def get_catalog_operators(ocp_version: str = "4.20"):
+async def get_catalog_operators(
+    ocp_version: str = "4.20",
+    pull_secret: str = "/root/pull-secret",
+):
     """
-    列出指定 catalog 中所有可用的 Operators。
-    不加 --package，回傳完整清單（name / display_name / default_channel）。
-    注意：首次執行需拉取 catalog index image，可能需要 5～30 分鐘。
+    列出指定 catalog 中所有可用的 Operators（oc-mirror --v1 list operators）。
+    需提供 Pull Secret 路徑以存取 registry.redhat.io。
     """
-    return await list_catalog_operators(ocp_version)
+    return await list_catalog_operators(ocp_version, pull_secret)
 
 
 @app.post("/api/imageset/operators/search", response_model=OperatorSearchResult)
@@ -157,7 +159,7 @@ async def search_operator_versions(req: OperatorSearchRequest):
     result = await search_operator(
         operator_name=req.operator_name,
         ocp_version=req.ocp_version,
-        image_timeout=req.image_timeout,
+        pull_secret=req.pull_secret,
     )
     return result
 

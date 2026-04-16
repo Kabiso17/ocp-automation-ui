@@ -66,14 +66,18 @@ async def search_operator(
     operator_name: str,
     ocp_version: str = "4.20",
     image_timeout: str = "30m",  # 保留參數避免 API 破壞，但不傳給 oc-mirror
+    pull_secret: str = "/root/pull-secret",
 ) -> dict:
     """
-    執行 oc-mirror list operators 查詢指定 operator 的頻道與版本。
+    執行 oc-mirror --v1 list operators 查詢指定 operator 的頻道與版本。
+    需要 Pull Secret 才能存取 registry.redhat.io。
     """
     catalog = f"registry.redhat.io/redhat/redhat-operator-index:v{ocp_version}"
 
-    cmd = [
-        "oc-mirror",
+    cmd = ["oc-mirror", "--v1"]
+    if pull_secret and Path(pull_secret).exists():
+        cmd.append(f"--registry-config={pull_secret}")
+    cmd += [
         "list",
         "operators",
         f"--catalog={catalog}",
@@ -165,15 +169,18 @@ def _parse_channels(output: str) -> List[dict]:
 
 async def list_catalog_operators(
     ocp_version: str = "4.20",
+    pull_secret: str = "/root/pull-secret",
 ) -> dict:
     """
-    執行 oc-mirror list operators 列出指定 catalog 的所有 Operator（不加 --package）。
-    回傳完整清單，每個 operator 包含 name / display_name / default_channel。
+    執行 oc-mirror --v1 list operators 列出指定 catalog 的所有 Operator（不加 --package）。
+    需要 Pull Secret 才能存取 registry.redhat.io。
     """
     catalog = f"registry.redhat.io/redhat/redhat-operator-index:v{ocp_version}"
 
-    cmd = [
-        "oc-mirror",
+    cmd = ["oc-mirror", "--v1"]
+    if pull_secret and Path(pull_secret).exists():
+        cmd.append(f"--registry-config={pull_secret}")
+    cmd += [
         "list",
         "operators",
         f"--catalog={catalog}",

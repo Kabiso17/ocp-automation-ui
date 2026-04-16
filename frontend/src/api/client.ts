@@ -31,10 +31,11 @@ export const getImageset = () =>
 export const searchOperator = (
   operator_name: string,
   ocp_version: string,
+  pull_secret = '/root/pull-secret',
 ) =>
   api.post<import('../types').OperatorSearchResult>(
     '/api/imageset/operators/search',
-    { operator_name, ocp_version },
+    { operator_name, ocp_version, pull_secret },
     { timeout: 0 },  // 無限等待，oc-mirror 可能很慢
   )
 
@@ -60,9 +61,9 @@ export const removeOperator = (operator_name: string, catalog_tag: string = 'v4.
 export const exportImagesetYaml = () =>
   api.get<{ yaml: string }>('/api/imageset/export')
 
-export const listCatalogOperators = (ocp_version: string) =>
+export const listCatalogOperators = (ocp_version: string, pull_secret = '/root/pull-secret') =>
   api.get<import('../types').CatalogListResult>('/api/operators/catalog', {
-    params: { ocp_version },
+    params: { ocp_version, pull_secret },
     timeout: 0,  // oc-mirror 拉取 catalog index 可能需要很長時間
   })
 

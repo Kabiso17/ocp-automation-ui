@@ -134,8 +134,9 @@ function SearchResultList({
 
 // ── 搜尋區塊 ────────────────────────────────────────────────────────
 
-function SearchPanel({ catalogTag, onAdded }: {
+function SearchPanel({ catalogTag, pullSecret, onAdded }: {
   catalogTag: string
+  pullSecret: string
   onAdded: () => void
 }) {
   const [operatorName, setOperatorName] = useState('')
@@ -154,6 +155,7 @@ function SearchPanel({ catalogTag, onAdded }: {
       const { data } = await searchOperator(
         operatorName.trim(),
         ocpVersion,
+        pullSecret,
       )
       setSearchResult(data)
     } catch (e: unknown) {
@@ -220,7 +222,7 @@ function SearchPanel({ catalogTag, onAdded }: {
             </select>
           </div>
           <div className="mt-2 text-xs text-slate-500">
-            對應指令：<code className="bg-slate-800 px-1 rounded">oc-mirror list operators --catalog=registry.redhat.io/redhat/redhat-operator-index:v{ocpVersion} --package={operatorName || '<name>'}</code>
+            對應指令：<code className="bg-slate-800 px-1 rounded">oc-mirror --v1 --registry-config={pullSecret} list operators --catalog=registry.redhat.io/redhat/redhat-operator-index:v{ocpVersion} --package={operatorName || '<name>'}</code>
           </div>
         </div>
       )}
@@ -384,8 +386,9 @@ function ExportModal({ onClose }: { onClose: () => void }) {
 
 // ── Catalog 瀏覽器 ───────────────────────────────────────────────────
 
-function CatalogBrowser({ catalogTag, onAdded }: {
+function CatalogBrowser({ catalogTag, pullSecret, onAdded }: {
   catalogTag: string
+  pullSecret: string
   onAdded: () => void
 }) {
   const [ocpVersion, setOcpVersion] = useState('4.20')
@@ -411,7 +414,7 @@ function CatalogBrowser({ catalogTag, onAdded }: {
     setExpanded(null)
     setChannelCache({})
     try {
-      const { data } = await listCatalogOperators(ocpVersion)
+      const { data } = await listCatalogOperators(ocpVersion, pullSecret)
       setResult(data)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -430,7 +433,7 @@ function CatalogBrowser({ catalogTag, onAdded }: {
     if (!channelCache[opName]) {
       setChannelCache(prev => ({ ...prev, [opName]: { loading: true, channels: [] } }))
       try {
-        const { data } = await searchOperator(opName, ocpVersion)
+        const { data } = await searchOperator(opName, ocpVersion, pullSecret)
         setChannelCache(prev => ({
           ...prev,
           [opName]: { loading: false, channels: data.channels, error: data.error },
@@ -505,8 +508,11 @@ function CatalogBrowser({ catalogTag, onAdded }: {
           <p className="mt-3 text-xs text-slate-500">
             對應指令：
             <code className="bg-slate-900 px-1 py-0.5 rounded font-mono">
-              oc-mirror list operators --catalog=registry.redhat.io/redhat/redhat-operator-index:v{ocpVersion}
+              oc-mirror --v1 --registry-config={pullSecret} list operators --catalog=registry.redhat.io/redhat/redhat-operator-index:v{ocpVersion}
             </code>
+          </p>
+          <p className="mt-1 text-xs text-yellow-600/80">
+            ⚠️ list operators 指令目前僅 oc-mirror v1 支援（v2 尚未提供對應功能）
           </p>
 
           {loading && (
@@ -642,6 +648,7 @@ export default function ImagesetManager() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showExport, setShowExport] = useState(false)
+  const [pullSecret, setPullSecret] = useState('/root/pull-secret')
 
   // 目前只支援第一個 catalog（redhat-operator-index）
   const catalogEntry = imageset?.mirror.operators?.[0]
@@ -725,6 +732,21 @@ export default function ImagesetManager() {
         </div>
       </div>
 
+      {/* Pull Secret 設定 */}
+      <div className="bg-slate-800 rounded-xl border border-slate-700 px-5 py-3 flex items-center gap-4">
+        <span className="text-xs text-slate-400 shrink-0">Pull Secret 路徑</span>
+        <input
+          type="text"
+          value={pullSecret}
+          onChange={e => setPullSecret(e.target.value)}
+          placeholder="/root/pull-secret"
+          className="flex-1 bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-ocp-red"
+        />
+        <span className="text-xs text-slate-500 shrink-0">
+          用於存取 registry.redhat.io
+        </span>
+      </div>
+
       {/* 摘要 */}
       <div className="grid grid-cols-3 gap-4">
         {[
@@ -785,10 +807,10 @@ export default function ImagesetManager() {
       </div>
 
       {/* 搜尋新增區塊 */}
-      <SearchPanel catalogTag={catalogTag} onAdded={loadImageset} />
+      <SearchPanel catalogTag={catalogTag} pullSecret={pullSecret} onAdded={loadImageset} />
 
       {/* Catalog 瀏覽器 */}
-      <CatalogBrowser catalogTag={catalogTag} onAdded={loadImageset} />
+      <CatalogBrowser catalogTag={catalogTag} pullSecret={pullSecret} onAdded={loadImageset} />
 
       {/* Additional Images 唯讀顯示 */}
       {imageset?.mirror.additionalImages && imageset.mirror.additionalImages.length > 0 && (

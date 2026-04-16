@@ -84,7 +84,7 @@ def _run_oc_mirror_sync(cmd: list, cmd_str: str, log_path: Path) -> None:
 
 async def run_oc_mirror(destination: str, workspace: str = "/tmp/oc-mirror-workspace") -> None:
     """
-    背景執行 oc-mirror（透過執行緒，相容 Windows asyncio）。
+    背景執行 oc-mirror v2（透過執行緒，相容 Windows asyncio）。
 
     destination: docker://registry:5000 或 file:///output/path
     workspace:   oc-mirror v2 工作目錄（--workspace）
@@ -96,6 +96,7 @@ async def run_oc_mirror(destination: str, workspace: str = "/tmp/oc-mirror-works
 
     cmd = [
         "oc-mirror",
+        "--v2",
         f"--config={IMAGESET_PATH}",
         f"--workspace={workspace}",
         destination,
