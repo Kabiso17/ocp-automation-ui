@@ -42,29 +42,50 @@ step "確認 Git..."
 command -v git &>/dev/null || err "找不到 git，請先安裝：dnf install git -y"
 log "Git: $(git --version)"
 
-# ── Step 3: 下載 ocp-automation playbooks ──
-step "設定 automation 目錄..."
-AUTOMATION_DIR="$SCRIPT_DIR/automation"
+# ── Step 3: Clone ocp-automation（Ansible Playbooks 入口）──
+# 預設 clone 到 ./automation/
+# 可透過環境變數 AUTOMATION_DIR 覆蓋
+step "設定 ocp-automation（Playbooks）..."
+AUTOMATION_DIR="${AUTOMATION_DIR:-$SCRIPT_DIR/automation}"
 if [ -d "$AUTOMATION_DIR/.git" ]; then
-    log "automation 已存在，跳過"
+    log "ocp-automation 已存在（$AUTOMATION_DIR），跳過"
 elif [ -d "$AUTOMATION_DIR" ] && [ "$(ls -A "$AUTOMATION_DIR" 2>/dev/null)" ]; then
     log "automation 目錄已存在（非 git repo），跳過"
 else
     step "Clone ocp-automation repo..."
     git clone https://github.com/Kabiso17/ocp-automation.git "$AUTOMATION_DIR" 2>&1 || {
         warn "無法 clone ocp-automation（可能是 private repo 需要授權）"
-        warn "請手動執行：git clone https://github.com/Kabiso17/ocp-automation.git automation"
+        warn "請手動執行：git clone https://github.com/Kabiso17/ocp-automation.git $AUTOMATION_DIR"
         mkdir -p "$AUTOMATION_DIR"
     }
 fi
 
-# ── Step 4: 建立 vars 目錄 ──
-step "建立 vars 目錄..."
+# ── Step 4: Clone OpenShift-Automation（Ansible Roles 核心）──
+# 預設 clone 到 ../OpenShift-Automation/（與 UI repo 同層）
+# 對應 site.yml 中的 roles 路徑：/root/OpenShift-Automation/roles/...
+# 可透過環境變數 OCP_ROLES_DIR 覆蓋
+step "設定 OpenShift-Automation（Ansible Roles）..."
+OCP_ROLES_DIR="${OCP_ROLES_DIR:-$(dirname "$SCRIPT_DIR")/OpenShift-Automation}"
+if [ -d "$OCP_ROLES_DIR/.git" ]; then
+    log "OpenShift-Automation 已存在（$OCP_ROLES_DIR），跳過"
+elif [ -d "$OCP_ROLES_DIR" ] && [ "$(ls -A "$OCP_ROLES_DIR" 2>/dev/null)" ]; then
+    log "OpenShift-Automation 目錄已存在（非 git repo），跳過"
+else
+    step "Clone OpenShift-Automation repo..."
+    git clone https://github.com/Kabiso17/OpenShift-Automation.git "$OCP_ROLES_DIR" 2>&1 || {
+        warn "無法 clone OpenShift-Automation（可能是 private repo 需要授權）"
+        warn "請手動執行：git clone https://github.com/Kabiso17/OpenShift-Automation.git $OCP_ROLES_DIR"
+        mkdir -p "$OCP_ROLES_DIR"
+    }
+fi
+
+# ── Step 5: 建立 vars / logs 目錄 ──
+step "建立 vars 和 logs 目錄..."
 mkdir -p "$SCRIPT_DIR/vars"
 mkdir -p "$SCRIPT_DIR/logs"
 log "vars/ 和 logs/ 目錄已準備"
 
-# ── Step 5: 建立 Python venv ──
+# ── Step 6: 建立 Python venv ──
 step "建立 Python 虛擬環境..."
 VENV_DIR="$SCRIPT_DIR/backend/venv"
 if [ ! -d "$VENV_DIR" ]; then
@@ -74,13 +95,13 @@ else
     log "虛擬環境已存在，跳過"
 fi
 
-# ── Step 6: 安裝 Python 套件 ──
+# ── Step 7: 安裝 Python 套件 ──
 step "安裝 Python 套件..."
 "$VENV_DIR/bin/pip" install -q --upgrade pip
 "$VENV_DIR/bin/pip" install -q -r "$SCRIPT_DIR/backend/requirements.txt"
 log "Python 套件安裝完成"
 
-# ── Step 7: 建置前端 ──
+# ── Step 8: 建置前端 ──
 step "建置前端..."
 DIST_DIR="$SCRIPT_DIR/frontend/dist"
 if [ -d "$DIST_DIR" ]; then
@@ -109,6 +130,11 @@ fi
 echo ""
 echo "============================================"
 log "設定完成！"
+echo ""
+echo "  已準備的目錄："
+echo "    UI 程式：        $SCRIPT_DIR"
+echo "    Ansible 入口：   $AUTOMATION_DIR"
+echo "    Ansible Roles：  $OCP_ROLES_DIR"
 echo ""
 echo "  下一步：執行 bash start.sh"
 echo "  然後開啟瀏覽器：http://$(hostname -I | awk '{print $1}' 2>/dev/null || echo 'localhost'):8000"
