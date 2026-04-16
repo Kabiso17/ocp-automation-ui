@@ -167,6 +167,124 @@ def _parse_channels(output: str) -> List[dict]:
     return channels
 
 
+async def list_catalog_operators(
+    ocp_version: str = "4.20",
+    image_timeout: str = "30m",
+) -> dict:
+    """
+    執行 oc-mirror list operators 列出指定 catalog 的所有 Operator（不加 --package）。
+    回傳完整清單，每個 operator 包含 name / display_name / default_channel。
+    """
+    catalog = f"registry.redhat.io/redhat/redhat-operator-index:v{ocp_version}"
+
+    cmd = [
+        "oc-mirror",
+        f"--image-timeout={image_timeout}",
+        "list",
+        "operators",
+        f"--catalog={catalog}",
+    ]
+
+    def _run() -> subprocess.CompletedProcess:
+        return subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, _run)
+    except FileNotFoundError:
+        return {
+            "success": False,
+            "error": "找不到 oc-mirror，請確認已安裝並在 PATH 中。",
+            "catalog": catalog,
+            "total": 0,
+            "operators": [],
+        }
+
+    out = result.stdout.decode("utf-8", errors="replace")
+    err = result.stderr.decode("utf-8", errors="replace")
+
+    if result.returncode != 0:
+        return {
+            "success": False,
+            "error": err or "oc-mirror 執行失敗",
+            "catalog": catalog,
+            "total": 0,
+            "operators": [],
+        }
+
+    operators = _parse_catalog_list(out)
+    return {
+        "success": True,
+        "catalog": catalog,
+        "total": len(operators),
+        "operators": operators,
+    }
+
+
+def _parse_catalog_list(output: str) -> List[dict]:
+    """
+    解析 oc-mirror list operators --catalog=... （不加 --package）的輸出。
+
+    範例輸出（欄位以空白對齊）：
+    NAME                                        DISPLAY NAME                              DEFAULT CHANNEL
+    3scale-operator                             Red Hat Integration - 3scale              threescale-2.13
+    ack-cloudwatch-controller                   AWS Controllers for Kubernetes            alpha
+    """
+    operators: List[dict] = []
+    lines = output.splitlines()
+
+    # 尋找標題行（含 NAME 和 DISPLAY NAME）
+    header_idx = None
+    for i, line in enumerate(lines):
+        if re.match(r"\s*NAME\s+DISPLAY", line, re.IGNORECASE):
+            header_idx = i
+            break
+
+    if header_idx is None:
+        return operators
+
+    header = lines[header_idx]
+    header_upper = header.upper()
+
+    try:
+        name_start = header_upper.index("NAME")
+        display_start = header_upper.index("DISPLAY NAME")
+        channel_start = header_upper.index("DEFAULT CHANNEL")
+    except ValueError:
+        return operators
+
+    for line in lines[header_idx + 1:]:
+        if not line.strip():
+            continue
+        line_len = len(line)
+        name = (
+            line[name_start:display_start].strip()
+            if line_len > display_start
+            else line[name_start:].strip()
+        )
+        display_name = (
+            line[display_start:channel_start].strip()
+            if line_len > channel_start
+            else (line[display_start:].strip() if line_len > display_start else "")
+        )
+        default_channel = line[channel_start:].strip() if line_len > channel_start else ""
+
+        if name:
+            operators.append(
+                {
+                    "name": name,
+                    "display_name": display_name,
+                    "default_channel": default_channel,
+                }
+            )
+
+    return operators
+
+
 def add_or_update_operator(
     imageset: dict,
     operator_name: str,

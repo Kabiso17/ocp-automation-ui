@@ -14,6 +14,7 @@ from runner import run_phase, phase_states, log_generator, VALID_PHASES
 from imageset import (
     read_imageset, write_imageset,
     search_operator, add_or_update_operator, remove_operator,
+    list_catalog_operators,
 )
 from mirror_runner import run_oc_mirror, mirror_state, mirror_log_generator
 from tools import (
@@ -135,6 +136,19 @@ def put_imageset(data: dict):
     """直接覆寫整個 imageset-config.yaml（進階用法）"""
     write_imageset(data)
     return {"message": "imageset-config.yaml 已儲存"}
+
+
+@app.get("/api/operators/catalog")
+async def get_catalog_operators(
+    ocp_version: str = "4.20",
+    image_timeout: str = "30m",
+):
+    """
+    列出指定 catalog 中所有可用的 Operators。
+    不加 --package，回傳完整清單（name / display_name / default_channel）。
+    注意：首次執行需拉取 catalog index image，可能需要 5～30 分鐘。
+    """
+    return await list_catalog_operators(ocp_version, image_timeout)
 
 
 @app.post("/api/imageset/operators/search", response_model=OperatorSearchResult)

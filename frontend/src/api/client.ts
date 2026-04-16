@@ -61,6 +61,12 @@ export const removeOperator = (operator_name: string, catalog_tag: string = 'v4.
 export const exportImagesetYaml = () =>
   api.get<{ yaml: string }>('/api/imageset/export')
 
+export const listCatalogOperators = (ocp_version: string, image_timeout = '30m') =>
+  api.get<import('../types').CatalogListResult>('/api/operators/catalog', {
+    params: { ocp_version, image_timeout },
+    timeout: 0,  // oc-mirror 拉取 catalog index 可能需要很長時間
+  })
+
 // CLI 工具下載
 export const getToolsStatus = () =>
   api.get<Record<string, import('../types').ToolStatus>>('/api/tools/status')

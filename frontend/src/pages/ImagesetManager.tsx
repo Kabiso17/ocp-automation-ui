@@ -15,14 +15,14 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Search, Plus, Trash2, Download, RefreshCw,
   ChevronDown, ChevronUp, AlertCircle, CheckCircle2,
-  Clock, Package, Copy, Check,
+  Clock, Package, Copy, Check, Database,
 } from 'lucide-react'
 import {
   getImageset, searchOperator, addOperator,
-  removeOperator, exportImagesetYaml,
+  removeOperator, exportImagesetYaml, listCatalogOperators,
 } from '../api/client'
 import type {
-  ImagesetConfig, ImagesetPackage, OperatorChannelResult,
+  ImagesetConfig, ImagesetPackage, OperatorChannelResult, CatalogOperator,
 } from '../types'
 
 // ── 小工具元件 ──────────────────────────────────────────────────────
@@ -401,6 +401,276 @@ function ExportModal({ onClose }: { onClose: () => void }) {
   )
 }
 
+// ── Catalog 瀏覽器 ───────────────────────────────────────────────────
+
+function CatalogBrowser({ catalogTag, onAdded }: {
+  catalogTag: string
+  onAdded: () => void
+}) {
+  const [ocpVersion, setOcpVersion] = useState('4.20')
+  const [imageTimeout, setImageTimeout] = useState('30m')
+  const [loading, setLoading] = useState(false)
+  const [collapsed, setCollapsed] = useState(true)
+  const [result, setResult] = useState<{
+    success: boolean
+    error?: string
+    catalog?: string
+    total: number
+    operators: CatalogOperator[]
+  } | null>(null)
+  const [filter, setFilter] = useState('')
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [channelCache, setChannelCache] = useState<
+    Record<string, { loading: boolean; channels: OperatorChannelResult[]; error?: string }>
+  >({})
+
+  const handleLoad = async () => {
+    setLoading(true)
+    setResult(null)
+    setFilter('')
+    setExpanded(null)
+    setChannelCache({})
+    try {
+      const { data } = await listCatalogOperators(ocpVersion, imageTimeout)
+      setResult(data)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setResult({ success: false, error: msg, total: 0, operators: [] })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleExpandRow = async (opName: string) => {
+    if (expanded === opName) {
+      setExpanded(null)
+      return
+    }
+    setExpanded(opName)
+    if (!channelCache[opName]) {
+      setChannelCache(prev => ({ ...prev, [opName]: { loading: true, channels: [] } }))
+      try {
+        const { data } = await searchOperator(opName, ocpVersion, imageTimeout)
+        setChannelCache(prev => ({
+          ...prev,
+          [opName]: { loading: false, channels: data.channels, error: data.error },
+        }))
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setChannelCache(prev => ({
+          ...prev,
+          [opName]: { loading: false, channels: [], error: msg },
+        }))
+      }
+    }
+  }
+
+  const filtered = (result?.operators ?? []).filter(op =>
+    !filter ||
+    op.name.toLowerCase().includes(filter.toLowerCase()) ||
+    op.display_name.toLowerCase().includes(filter.toLowerCase()),
+  )
+
+  return (
+    <div className="bg-slate-800 rounded-xl border border-slate-700">
+      {/* 標題列（可折疊） */}
+      <button
+        className="w-full flex items-center justify-between px-5 py-4 text-left"
+        onClick={() => setCollapsed(v => !v)}
+      >
+        <h3 className="text-white font-semibold flex items-center gap-2">
+          <Database size={16} className="text-ocp-red" />
+          瀏覽所有可用 Operators
+          {result?.success && (
+            <span className="ml-1 text-xs text-slate-400 font-normal">
+              共 {result.total} 個
+            </span>
+          )}
+        </h3>
+        {collapsed
+          ? <ChevronDown size={16} className="text-slate-400" />
+          : <ChevronUp size={16} className="text-slate-400" />
+        }
+      </button>
+
+      {!collapsed && (
+        <div className="px-5 pb-5 border-t border-slate-700">
+          {/* 控制列 */}
+          <div className="mt-4 flex flex-wrap gap-3 items-end">
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">OCP 版本</label>
+              <select
+                value={ocpVersion}
+                onChange={e => setOcpVersion(e.target.value)}
+                disabled={loading}
+                className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white focus:outline-none disabled:opacity-50"
+              >
+                {['4.20', '4.19', '4.18', '4.17', '4.16'].map(v => (
+                  <option key={v}>{v}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1 flex items-center gap-1">
+                <Clock size={10} /> Image Timeout
+              </label>
+              <select
+                value={imageTimeout}
+                onChange={e => setImageTimeout(e.target.value)}
+                disabled={loading}
+                className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white focus:outline-none disabled:opacity-50"
+              >
+                <option value="10m">10 分鐘</option>
+                <option value="30m">30 分鐘（預設）</option>
+                <option value="60m">60 分鐘</option>
+                <option value="120m">120 分鐘</option>
+              </select>
+            </div>
+            <button
+              onClick={handleLoad}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 bg-ocp-red/80 hover:bg-ocp-red disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              {loading
+                ? <><RefreshCw size={14} className="animate-spin" />載入中…</>
+                : <><Database size={14} />載入所有 Operators</>
+              }
+            </button>
+          </div>
+
+          <p className="mt-3 text-xs text-slate-500">
+            對應指令：
+            <code className="bg-slate-900 px-1 py-0.5 rounded font-mono">
+              oc-mirror --image-timeout={imageTimeout} list operators --catalog=registry.redhat.io/redhat/redhat-operator-index:v{ocpVersion}
+            </code>
+          </p>
+
+          {loading && (
+            <div className="mt-4 p-3 bg-yellow-900/20 border border-yellow-700/50 rounded-lg text-yellow-300 text-sm flex items-start gap-2">
+              <RefreshCw size={14} className="animate-spin shrink-0 mt-0.5" />
+              <span>
+                正在從 Red Hat catalog 拉取 Operator 清單，首次執行需要 <strong>5～30 分鐘</strong>（取決於網路速度）。
+                拉取完成後結果會快取，後續查詢較快。請耐心等待…
+              </span>
+            </div>
+          )}
+
+          {result && !result.success && (
+            <div className="mt-4 p-3 bg-red-900/20 border border-red-700 rounded-lg">
+              <div className="text-red-300 text-sm font-medium flex items-center gap-2">
+                <AlertCircle size={14} /> 載入失敗
+              </div>
+              <pre className="mt-2 text-red-400 text-xs whitespace-pre-wrap break-all">
+                {result.error}
+              </pre>
+            </div>
+          )}
+
+          {result?.success && (
+            <div className="mt-4 space-y-3">
+              {/* 篩選列 */}
+              <div className="flex items-center gap-3">
+                <div className="relative flex-1 max-w-md">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={filter}
+                    onChange={e => setFilter(e.target.value)}
+                    placeholder="篩選 Operator 名稱或描述…"
+                    className="w-full bg-slate-900 border border-slate-600 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-ocp-red"
+                  />
+                </div>
+                <span className="text-xs text-slate-400 shrink-0">
+                  顯示 {filtered.length} / {result.total}
+                </span>
+              </div>
+
+              {/* Operator 表格 */}
+              <div className="border border-slate-700 rounded-lg overflow-hidden">
+                <div className="max-h-[480px] overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-slate-900 z-10">
+                      <tr className="text-xs text-slate-400 uppercase tracking-wide border-b border-slate-700">
+                        <th className="px-4 py-2.5 text-left font-medium w-64">名稱</th>
+                        <th className="px-4 py-2.5 text-left font-medium hidden lg:table-cell">說明</th>
+                        <th className="px-4 py-2.5 text-left font-medium w-36">預設頻道</th>
+                        <th className="px-4 py-2.5 text-right font-medium w-24">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map(op => (
+                        <tr key={op.name} className="border-t border-slate-700/60 hover:bg-slate-700/20">
+                          {/* 名稱 */}
+                          <td className="px-4 py-2.5 align-top">
+                            <span className="font-mono text-xs text-white break-all">{op.name}</span>
+                          </td>
+                          {/* 說明 */}
+                          <td className="px-4 py-2.5 hidden lg:table-cell align-top">
+                            <span className="text-xs text-slate-400">{op.display_name}</span>
+                          </td>
+                          {/* 預設頻道 */}
+                          <td className="px-4 py-2.5 align-top">
+                            <span className="font-mono text-xs text-emerald-400">{op.default_channel}</span>
+                          </td>
+                          {/* 操作 */}
+                          <td className="px-4 py-2.5 align-top text-right">
+                            <button
+                              onClick={() => handleExpandRow(op.name)}
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                                expanded === op.name
+                                  ? 'bg-ocp-red/20 text-ocp-red border border-ocp-red/40'
+                                  : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                              }`}
+                            >
+                              {expanded === op.name
+                                ? <><ChevronUp size={11} />收起</>
+                                : <><Plus size={11} />加入</>
+                              }
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {/* 展開的頻道列 */}
+                      {filtered.map(op =>
+                        expanded === op.name ? (
+                          <tr key={`${op.name}__expanded`} className="border-t border-slate-700/60 bg-slate-900/60">
+                            <td colSpan={4} className="px-6 py-3">
+                              {channelCache[op.name]?.loading ? (
+                                <div className="flex items-center gap-2 text-slate-400 text-sm py-1">
+                                  <RefreshCw size={13} className="animate-spin text-ocp-red" />
+                                  正在查詢 {op.name} 的頻道資訊…
+                                </div>
+                              ) : channelCache[op.name]?.error ? (
+                                <div className="text-red-400 text-xs flex items-center gap-2 py-1">
+                                  <AlertCircle size={12} />
+                                  {channelCache[op.name]?.error}
+                                </div>
+                              ) : (channelCache[op.name]?.channels?.length ?? 0) > 0 ? (
+                                <SearchResultList
+                                  channels={channelCache[op.name].channels}
+                                  operatorName={op.name}
+                                  catalogTag={catalogTag}
+                                  onAdded={onAdded}
+                                />
+                              ) : (
+                                <div className="text-slate-500 text-xs py-1">尚無頻道資訊</div>
+                              )}
+                            </td>
+                          </tr>
+                        ) : null,
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── 主頁面 ───────────────────────────────────────────────────────────
 
 export default function ImagesetManager() {
@@ -552,6 +822,9 @@ export default function ImagesetManager() {
 
       {/* 搜尋新增區塊 */}
       <SearchPanel catalogTag={catalogTag} onAdded={loadImageset} />
+
+      {/* Catalog 瀏覽器 */}
+      <CatalogBrowser catalogTag={catalogTag} onAdded={loadImageset} />
 
       {/* Additional Images 唯讀顯示 */}
       {imageset?.mirror.additionalImages && imageset.mirror.additionalImages.length > 0 && (

@@ -107,6 +107,20 @@ export interface OperatorSearchResult {
   channels: OperatorChannelResult[]
 }
 
+export interface CatalogOperator {
+  name: string
+  display_name: string
+  default_channel: string
+}
+
+export interface CatalogListResult {
+  success: boolean
+  error?: string
+  catalog?: string
+  total: number
+  operators: CatalogOperator[]
+}
+
 export type PhaseKey = 'prep' | 'install' | 'post' | 'operators'
 
 export interface PhaseInfo {
