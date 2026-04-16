@@ -65,19 +65,15 @@ def write_imageset(data: dict) -> None:
 async def search_operator(
     operator_name: str,
     ocp_version: str = "4.20",
-    image_timeout: str = "30m",
+    image_timeout: str = "30m",  # 保留參數避免 API 破壞，但不傳給 oc-mirror
 ) -> dict:
     """
     執行 oc-mirror list operators 查詢指定 operator 的頻道與版本。
-
-    使用 --image-timeout 避免拉取 catalog index 時 timeout。
     """
     catalog = f"registry.redhat.io/redhat/redhat-operator-index:v{ocp_version}"
 
-    # oc-mirror v2 全域 flag 需放在 subcommand 前
     cmd = [
         "oc-mirror",
-        f"--image-timeout={image_timeout}",
         "list",
         "operators",
         f"--catalog={catalog}",
@@ -169,7 +165,6 @@ def _parse_channels(output: str) -> List[dict]:
 
 async def list_catalog_operators(
     ocp_version: str = "4.20",
-    image_timeout: str = "30m",
 ) -> dict:
     """
     執行 oc-mirror list operators 列出指定 catalog 的所有 Operator（不加 --package）。
@@ -179,7 +174,6 @@ async def list_catalog_operators(
 
     cmd = [
         "oc-mirror",
-        f"--image-timeout={image_timeout}",
         "list",
         "operators",
         f"--catalog={catalog}",

@@ -139,16 +139,13 @@ def put_imageset(data: dict):
 
 
 @app.get("/api/operators/catalog")
-async def get_catalog_operators(
-    ocp_version: str = "4.20",
-    image_timeout: str = "30m",
-):
+async def get_catalog_operators(ocp_version: str = "4.20"):
     """
     列出指定 catalog 中所有可用的 Operators。
     不加 --package，回傳完整清單（name / display_name / default_channel）。
     注意：首次執行需拉取 catalog index image，可能需要 5～30 分鐘。
     """
-    return await list_catalog_operators(ocp_version, image_timeout)
+    return await list_catalog_operators(ocp_version)
 
 
 @app.post("/api/imageset/operators/search", response_model=OperatorSearchResult)

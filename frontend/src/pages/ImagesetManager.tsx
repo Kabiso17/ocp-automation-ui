@@ -15,7 +15,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Search, Plus, Trash2, Download, RefreshCw,
   ChevronDown, ChevronUp, AlertCircle, CheckCircle2,
-  Clock, Package, Copy, Check, Database,
+  Package, Copy, Check, Database,
 } from 'lucide-react'
 import {
   getImageset, searchOperator, addOperator,
@@ -140,7 +140,6 @@ function SearchPanel({ catalogTag, onAdded }: {
 }) {
   const [operatorName, setOperatorName] = useState('')
   const [ocpVersion, setOcpVersion] = useState('4.20')
-  const [imageTimeout, setImageTimeout] = useState('30m')
   const [searching, setSearching] = useState(false)
   const [searchResult, setSearchResult] = useState<{
     success: boolean; error?: string; channels: OperatorChannelResult[]
@@ -155,7 +154,6 @@ function SearchPanel({ catalogTag, onAdded }: {
       const { data } = await searchOperator(
         operatorName.trim(),
         ocpVersion,
-        imageTimeout,
       )
       setSearchResult(data)
     } catch (e: unknown) {
@@ -206,8 +204,8 @@ function SearchPanel({ catalogTag, onAdded }: {
       </button>
 
       {showAdvanced && (
-        <div className="mt-3 grid grid-cols-2 gap-3 p-3 bg-slate-900/50 rounded-lg border border-slate-700">
-          <div>
+        <div className="mt-3 p-3 bg-slate-900/50 rounded-lg border border-slate-700">
+          <div className="w-48">
             <label className="block text-xs text-slate-400 mb-1">OCP 版本</label>
             <select
               value={ocpVersion}
@@ -221,25 +219,8 @@ function SearchPanel({ catalogTag, onAdded }: {
               <option>4.16</option>
             </select>
           </div>
-          <div>
-            <label className="block text-xs text-slate-400 mb-1 flex items-center gap-1">
-              <Clock size={10} />
-              Image Timeout
-              <span className="text-slate-500">（避免 catalog 拉取超時）</span>
-            </label>
-            <select
-              value={imageTimeout}
-              onChange={e => setImageTimeout(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white focus:outline-none"
-            >
-              <option value="10m">10 分鐘</option>
-              <option value="30m">30 分鐘（預設）</option>
-              <option value="60m">60 分鐘</option>
-              <option value="120m">120 分鐘</option>
-            </select>
-          </div>
-          <div className="col-span-2 text-xs text-slate-500">
-            💡 對應 <code className="bg-slate-800 px-1 rounded">oc-mirror --image-timeout={imageTimeout} list operators --catalog=registry.redhat.io/redhat/redhat-operator-index:v{ocpVersion} --package={operatorName || '<name>'}</code>
+          <div className="mt-2 text-xs text-slate-500">
+            對應指令：<code className="bg-slate-800 px-1 rounded">oc-mirror list operators --catalog=registry.redhat.io/redhat/redhat-operator-index:v{ocpVersion} --package={operatorName || '<name>'}</code>
           </div>
         </div>
       )}
@@ -408,7 +389,6 @@ function CatalogBrowser({ catalogTag, onAdded }: {
   onAdded: () => void
 }) {
   const [ocpVersion, setOcpVersion] = useState('4.20')
-  const [imageTimeout, setImageTimeout] = useState('30m')
   const [loading, setLoading] = useState(false)
   const [collapsed, setCollapsed] = useState(true)
   const [result, setResult] = useState<{
@@ -431,7 +411,7 @@ function CatalogBrowser({ catalogTag, onAdded }: {
     setExpanded(null)
     setChannelCache({})
     try {
-      const { data } = await listCatalogOperators(ocpVersion, imageTimeout)
+      const { data } = await listCatalogOperators(ocpVersion)
       setResult(data)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -450,7 +430,7 @@ function CatalogBrowser({ catalogTag, onAdded }: {
     if (!channelCache[opName]) {
       setChannelCache(prev => ({ ...prev, [opName]: { loading: true, channels: [] } }))
       try {
-        const { data } = await searchOperator(opName, ocpVersion, imageTimeout)
+        const { data } = await searchOperator(opName, ocpVersion)
         setChannelCache(prev => ({
           ...prev,
           [opName]: { loading: false, channels: data.channels, error: data.error },
@@ -510,22 +490,6 @@ function CatalogBrowser({ catalogTag, onAdded }: {
                 ))}
               </select>
             </div>
-            <div>
-              <label className="block text-xs text-slate-400 mb-1 flex items-center gap-1">
-                <Clock size={10} /> Image Timeout
-              </label>
-              <select
-                value={imageTimeout}
-                onChange={e => setImageTimeout(e.target.value)}
-                disabled={loading}
-                className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white focus:outline-none disabled:opacity-50"
-              >
-                <option value="10m">10 分鐘</option>
-                <option value="30m">30 分鐘（預設）</option>
-                <option value="60m">60 分鐘</option>
-                <option value="120m">120 分鐘</option>
-              </select>
-            </div>
             <button
               onClick={handleLoad}
               disabled={loading}
@@ -541,7 +505,7 @@ function CatalogBrowser({ catalogTag, onAdded }: {
           <p className="mt-3 text-xs text-slate-500">
             對應指令：
             <code className="bg-slate-900 px-1 py-0.5 rounded font-mono">
-              oc-mirror --image-timeout={imageTimeout} list operators --catalog=registry.redhat.io/redhat/redhat-operator-index:v{ocpVersion}
+              oc-mirror list operators --catalog=registry.redhat.io/redhat/redhat-operator-index:v{ocpVersion}
             </code>
           </p>
 
