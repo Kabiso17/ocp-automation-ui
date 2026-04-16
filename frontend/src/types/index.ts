@@ -117,6 +117,28 @@ export interface PhaseInfo {
 }
 
 // ──────────────────────────────────────────
+// CLI 工具下載相關 Types
+// ──────────────────────────────────────────
+
+export interface ToolStatus {
+  label: string
+  description: string
+  installed: boolean
+  version: string | null
+  available: boolean
+  platform: string
+}
+
+export interface DownloadState {
+  status: 'idle' | 'running' | 'success' | 'failed'
+  tool: string | null
+  version: string | null
+  started_at: string | null
+  finished_at: string | null
+  log_lines: number
+}
+
+// ──────────────────────────────────────────
 // oc-mirror 下載相關 Types
 // ──────────────────────────────────────────
 

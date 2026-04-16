@@ -61,6 +61,20 @@ export const removeOperator = (operator_name: string, catalog_tag: string = 'v4.
 export const exportImagesetYaml = () =>
   api.get<{ yaml: string }>('/api/imageset/export')
 
+// CLI 工具下載
+export const getToolsStatus = () =>
+  api.get<Record<string, import('../types').ToolStatus>>('/api/tools/status')
+
+export const startToolDownload = (tool: string, ocp_version: string, install_dir: string) =>
+  api.post<{ message: string; tool: string; version: string }>(
+    '/api/tools/download',
+    null,
+    { params: { tool, ocp_version, install_dir }, timeout: 0 },
+  )
+
+export const resetToolsDownload = () =>
+  api.delete<{ message: string }>('/api/tools/download/reset')
+
 // Mirror (oc-mirror 下載)
 export const getMirrorStatus = () =>
   api.get<import('../types').MirrorStatus>('/api/mirror/status')

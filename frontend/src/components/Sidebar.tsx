@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Settings, Play, Server, Package, Download } from 'lucide-react'
+import { LayoutDashboard, Settings, Play, Server, Package, Download, Wrench } from 'lucide-react'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -7,6 +7,7 @@ const navItems = [
   { to: '/phases', label: '執行', icon: Play },
   { to: '/imageset', label: 'ImageSet', icon: Package },
   { to: '/operator-download', label: 'Operator 下載', icon: Download },
+  { to: '/tools', label: 'CLI 工具下載', icon: Wrench },
 ]
 
 interface SidebarProps {

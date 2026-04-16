@@ -16,6 +16,10 @@ from imageset import (
     search_operator, add_or_update_operator, remove_operator,
 )
 from mirror_runner import run_oc_mirror, mirror_state, mirror_log_generator
+from tools import (
+    get_tools_status, start_tool_download,
+    tools_log_generator, download_state, TOOL_DEFS,
+)
 
 app = FastAPI(
     title="OCP Automation API",
@@ -228,6 +232,60 @@ def reset_mirror_status():
         }
     )
     return {"message": "oc-mirror 狀態已重置"}
+
+
+# ──────────────────────────────────────────
+# 工具下載
+# ──────────────────────────────────────────
+
+@app.get("/api/tools/status")
+def get_tools_status_endpoint():
+    """回傳每個 CLI 工具的安裝狀態與版本。"""
+    return get_tools_status()
+
+
+@app.post("/api/tools/download", status_code=202)
+async def download_tool(
+    tool: str,
+    ocp_version: str,
+    install_dir: str,
+    background_tasks: BackgroundTasks,
+):
+    """下載並安裝指定工具。"""
+    if tool not in TOOL_DEFS:
+        raise HTTPException(status_code=400, detail=f"未知工具：{tool}，可用：{list(TOOL_DEFS.keys())}")
+    if download_state["status"] == "running":
+        raise HTTPException(status_code=409, detail="已有工具正在下載中，請等待完成")
+    background_tasks.add_task(start_tool_download, tool, ocp_version, install_dir)
+    return {"message": f"開始下載 {tool}@{ocp_version}", "tool": tool, "version": ocp_version}
+
+
+@app.get("/api/tools/download/logs")
+async def stream_tools_logs():
+    """SSE：串流工具下載 log。"""
+    return StreamingResponse(
+        tools_log_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/tools/download/state")
+def get_tools_download_state():
+    """取得目前工具下載狀態。"""
+    return download_state
+
+
+@app.delete("/api/tools/download/reset")
+def reset_tools_download():
+    """重置工具下載狀態。"""
+    if download_state["status"] == "running":
+        raise HTTPException(status_code=409, detail="正在下載中，無法重置")
+    download_state.update({
+        "status": "idle", "tool": None, "version": None,
+        "started_at": None, "finished_at": None, "log_lines": 0,
+    })
+    return {"message": "下載狀態已重置"}
 
 
 # ──────────────────────────────────────────
