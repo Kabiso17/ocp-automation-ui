@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import List, Optional
 import yaml
 
+from operator_cache import get_package, set_package, get_catalog, set_catalog
+
 # 預設路徑：automation repo 裡的 yaml/imageset-config.yaml
 IMAGESET_PATH = Path(
     os.environ.get(
@@ -67,13 +69,25 @@ async def search_operator(
     ocp_version: str = "4.20",
     image_timeout: str = "30m",  # 保留參數避免 API 破壞，但不傳給 oc-mirror
     pull_secret: str = "/root/pull-secret",
+    force_refresh: bool = False,
 ) -> dict:
     """
-    執行 oc-mirror --v1 list operators 查詢指定 operator 的頻道與版本。
-    需要 Pull Secret 才能存取 registry.redhat.io。
+    查詢指定 operator 的頻道與版本。
+    優先回傳本地快取；若 force_refresh=True 或快取不存在則呼叫 oc-mirror。
     """
-    catalog = f"registry.redhat.io/redhat/redhat-operator-index:v{ocp_version}"
+    # ── 快取命中 ──────────────────────────────────────────────────────
+    if not force_refresh:
+        cached = get_package(ocp_version, operator_name)
+        if cached:
+            return {
+                "success": True,
+                "channels": cached["channels"],
+                "from_cache": True,
+                "cached_at": cached["cached_at"],
+            }
 
+    # ── 呼叫 oc-mirror ────────────────────────────────────────────────
+    catalog = f"registry.redhat.io/redhat/redhat-operator-index:v{ocp_version}"
     cmd = [
         "oc-mirror",
         "list",
@@ -86,12 +100,7 @@ async def search_operator(
         env = dict(os.environ)
         if pull_secret and Path(pull_secret).exists():
             env["REGISTRY_AUTH_FILE"] = pull_secret
-        return subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=env,
-        )
+        return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
 
     try:
         loop = asyncio.get_event_loop()
@@ -101,6 +110,7 @@ async def search_operator(
             "success": False,
             "error": "找不到 oc-mirror，請確認已安裝並在 PATH 中。",
             "channels": [],
+            "from_cache": False,
         }
 
     out = result.stdout.decode("utf-8", errors="replace")
@@ -111,13 +121,20 @@ async def search_operator(
             "success": False,
             "error": err or "oc-mirror 執行失敗",
             "channels": [],
+            "from_cache": False,
         }
 
     channels = _parse_channels(out)
+
+    # ── 寫入快取 ──────────────────────────────────────────────────────
+    if channels:
+        set_package(ocp_version, operator_name, channels)
+
     return {
         "success": True,
         "raw": out,
         "channels": channels,
+        "from_cache": False,
     }
 
 
@@ -172,13 +189,28 @@ def _parse_channels(output: str) -> List[dict]:
 async def list_catalog_operators(
     ocp_version: str = "4.20",
     pull_secret: str = "/root/pull-secret",
+    force_refresh: bool = False,
 ) -> dict:
     """
-    執行 oc-mirror --v1 list operators 列出指定 catalog 的所有 Operator（不加 --package）。
-    需要 Pull Secret 才能存取 registry.redhat.io。
+    列出指定 catalog 的所有 Operator（不加 --package）。
+    優先回傳本地快取；若 force_refresh=True 或快取不存在則呼叫 oc-mirror。
     """
     catalog = f"registry.redhat.io/redhat/redhat-operator-index:v{ocp_version}"
 
+    # ── 快取命中 ──────────────────────────────────────────────────────
+    if not force_refresh:
+        cached = get_catalog(ocp_version)
+        if cached:
+            return {
+                "success": True,
+                "catalog": catalog,
+                "total": cached["total"],
+                "operators": cached["operators"],
+                "from_cache": True,
+                "cached_at": cached["cached_at"],
+            }
+
+    # ── 呼叫 oc-mirror ────────────────────────────────────────────────
     cmd = [
         "oc-mirror",
         "list",
@@ -190,12 +222,7 @@ async def list_catalog_operators(
         env = dict(os.environ)
         if pull_secret and Path(pull_secret).exists():
             env["REGISTRY_AUTH_FILE"] = pull_secret
-        return subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=env,
-        )
+        return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
 
     try:
         loop = asyncio.get_event_loop()
@@ -207,6 +234,7 @@ async def list_catalog_operators(
             "catalog": catalog,
             "total": 0,
             "operators": [],
+            "from_cache": False,
         }
 
     out = result.stdout.decode("utf-8", errors="replace")
@@ -219,14 +247,21 @@ async def list_catalog_operators(
             "catalog": catalog,
             "total": 0,
             "operators": [],
+            "from_cache": False,
         }
 
     operators = _parse_catalog_list(out)
+
+    # ── 寫入快取 ──────────────────────────────────────────────────────
+    if operators:
+        set_catalog(ocp_version, operators)
+
     return {
         "success": True,
         "catalog": catalog,
         "total": len(operators),
         "operators": operators,
+        "from_cache": False,
     }
 
 
@@ -290,16 +325,38 @@ def _parse_catalog_list(output: str) -> List[dict]:
     return operators
 
 
+def _pick_best_channel(channels: List[dict], default_channel: str) -> Optional[dict]:
+    """
+    從 package 的頻道清單中挑選最佳頻道：
+    1. 優先使用 default_channel（與 catalog 清單的 default_channel 相符）
+    2. 其次找名稱含 'stable' 的頻道
+    3. 最後 fallback 到第一個頻道
+    回傳 {channel, head_version, head_bundle} 或 None
+    """
+    if not channels:
+        return None
+    # 完全符合 default_channel
+    for ch in channels:
+        if ch.get("channel") == default_channel:
+            return ch
+    # 包含 stable
+    for ch in channels:
+        if "stable" in ch.get("channel", ""):
+            return ch
+    return channels[0]
+
+
 def add_or_update_operator(
     imageset: dict,
     operator_name: str,
     channel: str,
-    version: str,
+    version: str = "",
     catalog_tag: str = "v4.20",
 ) -> dict:
     """
     在 imageset dict 中新增或更新一個 operator package。
-    如果同名 operator 已存在則覆蓋其 channel 設定。
+    version 為空字串時不鎖定版本（oc-mirror 自動取最新），
+    適合「快速加入」場景。
     """
     catalog_url = f"registry.redhat.io/redhat/redhat-operator-index:{catalog_tag}"
     operators_list: List[dict] = imageset["mirror"].get("operators", [])
@@ -318,25 +375,28 @@ def add_or_update_operator(
 
     packages: List[dict] = catalog_entry.get("packages", [])
 
+    # 建立 channel entry：version 為空則不鎖版本
+    if version:
+        new_channel: dict = {"name": channel, "minVersion": version, "maxVersion": version}
+    else:
+        new_channel = {"name": channel}
+
     # 找到同名 package
     pkg = next((p for p in packages if p["name"] == operator_name), None)
-    new_channel = {
-        "name": channel,
-        "minVersion": version,
-        "maxVersion": version,
-    }
 
     if pkg is None:
         packages.append({"name": operator_name, "channels": [new_channel]})
     else:
-        # 更新或新增 channel
         existing_channels = pkg.get("channels", [])
         ch = next((c for c in existing_channels if c["name"] == channel), None)
         if ch is None:
             existing_channels.append(new_channel)
         else:
-            ch["minVersion"] = version
-            ch["maxVersion"] = version
+            ch.pop("minVersion", None)
+            ch.pop("maxVersion", None)
+            if version:
+                ch["minVersion"] = version
+                ch["maxVersion"] = version
         pkg["channels"] = existing_channels
 
     catalog_entry["packages"] = packages

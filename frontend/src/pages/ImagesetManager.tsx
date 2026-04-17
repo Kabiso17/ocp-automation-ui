@@ -15,14 +15,15 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Search, Plus, Trash2, Download, RefreshCw,
   ChevronDown, ChevronUp, AlertCircle, CheckCircle2,
-  Package, Copy, Check, Database,
+  Package, Copy, Check, Database, HardDrive, Zap,
 } from 'lucide-react'
 import {
   getImageset, searchOperator, addOperator,
   removeOperator, exportImagesetYaml, listCatalogOperators,
+  getCacheStats, clearOperatorCache,
 } from '../api/client'
 import type {
-  ImagesetConfig, ImagesetPackage, OperatorChannelResult, CatalogOperator,
+  ImagesetConfig, ImagesetPackage, OperatorChannelResult, CatalogOperator, CacheStats,
 } from '../types'
 
 // ── 小工具元件 ──────────────────────────────────────────────────────
@@ -40,6 +41,30 @@ function StatusBadge({ children, variant }: {
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono ${cls}`}>
       {children}
+    </span>
+  )
+}
+
+// ── 快取標記 ─────────────────────────────────────────────────────────
+
+function CacheBadge({ cachedAt, onForceRefresh }: {
+  cachedAt: string
+  onForceRefresh: () => void
+}) {
+  const ts = new Date(cachedAt).toLocaleString('zh-TW', {
+    month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  })
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400">
+      <HardDrive size={11} />
+      快取 {ts}
+      <button
+        onClick={onForceRefresh}
+        className="ml-1 text-slate-400 hover:text-white underline underline-offset-2"
+      >
+        重新查詢
+      </button>
     </span>
   )
 }
@@ -144,10 +169,11 @@ function SearchPanel({ catalogTag, pullSecret, onAdded }: {
   const [searching, setSearching] = useState(false)
   const [searchResult, setSearchResult] = useState<{
     success: boolean; error?: string; channels: OperatorChannelResult[]
+    from_cache?: boolean; cached_at?: string
   } | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
 
-  const handleSearch = async () => {
+  const handleSearch = async (forceRefresh = false) => {
     if (!operatorName.trim()) return
     setSearching(true)
     setSearchResult(null)
@@ -156,6 +182,7 @@ function SearchPanel({ catalogTag, pullSecret, onAdded }: {
         operatorName.trim(),
         ocpVersion,
         pullSecret,
+        forceRefresh,
       )
       setSearchResult(data)
     } catch (e: unknown) {
@@ -184,7 +211,7 @@ function SearchPanel({ catalogTag, pullSecret, onAdded }: {
           className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-ocp-red"
         />
         <button
-          onClick={handleSearch}
+          onClick={() => handleSearch()}
           disabled={searching || !operatorName.trim()}
           className="flex items-center gap-2 px-4 py-2.5 bg-ocp-red/80 hover:bg-ocp-red disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
         >
@@ -239,12 +266,22 @@ function SearchPanel({ catalogTag, pullSecret, onAdded }: {
         <div className="mt-3">
           {searchResult.success ? (
             searchResult.channels.length > 0 ? (
-              <SearchResultList
-                channels={searchResult.channels}
-                operatorName={operatorName.trim()}
-                catalogTag={catalogTag}
-                onAdded={onAdded}
-              />
+              <>
+                {searchResult.from_cache && searchResult.cached_at && (
+                  <div className="mb-2">
+                    <CacheBadge
+                      cachedAt={searchResult.cached_at}
+                      onForceRefresh={() => handleSearch(true)}
+                    />
+                  </div>
+                )}
+                <SearchResultList
+                  channels={searchResult.channels}
+                  operatorName={operatorName.trim()}
+                  catalogTag={catalogTag}
+                  onAdded={onAdded}
+                />
+              </>
             ) : (
               <div className="mt-3 p-3 bg-yellow-900/20 border border-yellow-700 rounded-lg text-yellow-300 text-sm flex items-center gap-2">
                 <AlertCircle size={14} />
@@ -259,6 +296,149 @@ function SearchPanel({ catalogTag, pullSecret, onAdded }: {
               <pre className="mt-2 text-red-400 text-xs whitespace-pre-wrap break-all">
                 {searchResult.error}
               </pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── 快取統計面板 ─────────────────────────────────────────────────────
+
+function CachePanel() {
+  const [stats, setStats] = useState<CacheStats | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [clearing, setClearing] = useState(false)
+  const [collapsed, setCollapsed] = useState(true)
+
+  const loadStats = async () => {
+    setLoading(true)
+    try {
+      const { data } = await getCacheStats()
+      setStats(data)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleClear = async (ocpVersion?: string) => {
+    if (!confirm(ocpVersion ? `清除 v${ocpVersion} 的快取？` : '清除全部快取？')) return
+    setClearing(true)
+    try {
+      await clearOperatorCache(ocpVersion)
+      await loadStats()
+    } finally {
+      setClearing(false)
+    }
+  }
+
+  const ts = (iso: string) =>
+    new Date(iso).toLocaleString('zh-TW', {
+      month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+    })
+
+  return (
+    <div className="bg-slate-800 rounded-xl border border-slate-700">
+      <button
+        className="w-full flex items-center justify-between px-5 py-4 text-left"
+        onClick={() => { setCollapsed(v => !v); if (collapsed) loadStats() }}
+      >
+        <h3 className="text-white font-semibold flex items-center gap-2">
+          <HardDrive size={16} className="text-ocp-red" />
+          本地快取管理
+          {stats && (
+            <span className="ml-1 text-xs text-slate-400 font-normal">
+              Catalog {stats.catalog_count} 筆 · Package {stats.package_count} 筆
+            </span>
+          )}
+        </h3>
+        {collapsed ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronUp size={16} className="text-slate-400" />}
+      </button>
+
+      {!collapsed && (
+        <div className="px-5 pb-5 border-t border-slate-700 space-y-4">
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              onClick={loadStats}
+              disabled={loading}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white rounded text-xs transition-colors"
+            >
+              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> 重新整理
+            </button>
+            <button
+              onClick={() => handleClear()}
+              disabled={clearing || !stats || (stats.catalog_count + stats.package_count) === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-900/40 hover:bg-red-800/60 disabled:opacity-40 text-red-300 rounded text-xs transition-colors"
+            >
+              <Trash2 size={12} /> 清除全部快取
+            </button>
+            {stats && (
+              <span className="text-xs text-slate-500 font-mono">{stats.db_path}</span>
+            )}
+          </div>
+
+          {stats && (
+            <div className="grid grid-cols-2 gap-4">
+              {/* Catalog 快取 */}
+              <div className="border border-slate-700 rounded-lg overflow-hidden">
+                <div className="bg-slate-900 px-4 py-2 flex items-center justify-between">
+                  <span className="text-xs text-slate-400 font-semibold uppercase tracking-wide flex items-center gap-1.5">
+                    <Database size={11} /> Catalog 快取（完整清單）
+                  </span>
+                  <span className="text-xs text-slate-500">{stats.catalog_count} 筆</span>
+                </div>
+                {stats.catalog_entries.length === 0 ? (
+                  <div className="px-4 py-3 text-xs text-slate-500">尚無快取</div>
+                ) : (
+                  <div className="divide-y divide-slate-700/60">
+                    {stats.catalog_entries.map(e => (
+                      <div key={e.ocp_version} className="px-4 py-2.5 flex items-center justify-between">
+                        <div>
+                          <span className="font-mono text-sm text-white">v{e.ocp_version}</span>
+                          <span className="ml-2 text-xs text-slate-400">{e.operator_count} 個 operators</span>
+                          <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                            <HardDrive size={9} /> {ts(e.cached_at)}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleClear(e.ocp_version)}
+                          className="text-xs text-slate-400 hover:text-red-400 transition-colors"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Package 快取 */}
+              <div className="border border-slate-700 rounded-lg overflow-hidden">
+                <div className="bg-slate-900 px-4 py-2 flex items-center justify-between">
+                  <span className="text-xs text-slate-400 font-semibold uppercase tracking-wide flex items-center gap-1.5">
+                    <Zap size={11} /> Package 快取（頻道/版本）
+                  </span>
+                  <span className="text-xs text-slate-500">{stats.package_count} 筆</span>
+                </div>
+                {stats.package_entries.length === 0 ? (
+                  <div className="px-4 py-3 text-xs text-slate-500">尚無快取</div>
+                ) : (
+                  <div className="divide-y divide-slate-700/60 max-h-64 overflow-y-auto">
+                    {stats.package_entries.map(e => (
+                      <div key={`${e.ocp_version}-${e.package_name}`} className="px-4 py-2 flex items-center justify-between">
+                        <div>
+                          <span className="font-mono text-xs text-white">{e.package_name}</span>
+                          <span className="ml-2 text-xs text-slate-500">v{e.ocp_version}</span>
+                          <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                            <HardDrive size={9} /> {ts(e.cached_at)}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -400,27 +580,58 @@ function CatalogBrowser({ catalogTag, pullSecret, onAdded }: {
     catalog?: string
     total: number
     operators: CatalogOperator[]
+    from_cache?: boolean
+    cached_at?: string
   } | null>(null)
   const [filter, setFilter] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [channelCache, setChannelCache] = useState<
-    Record<string, { loading: boolean; channels: OperatorChannelResult[]; error?: string }>
+    Record<string, { loading: boolean; channels: OperatorChannelResult[]; error?: string; from_cache?: boolean; cached_at?: string }>
   >({})
+  // 快速加入的每列狀態：idle | adding | added | error
+  const [quickAddState, setQuickAddState] = useState<Record<string, 'idle' | 'adding' | 'added' | 'error'>>({})
 
-  const handleLoad = async () => {
+  const handleLoad = async (forceRefresh = false) => {
     setLoading(true)
     setResult(null)
     setFilter('')
     setExpanded(null)
-    setChannelCache({})
+    if (forceRefresh) setChannelCache({})
     try {
-      const { data } = await listCatalogOperators(ocpVersion, pullSecret)
+      const { data } = await listCatalogOperators(ocpVersion, pullSecret, forceRefresh)
       setResult(data)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       setResult({ success: false, error: msg, total: 0, operators: [] })
     } finally {
       setLoading(false)
+    }
+  }
+
+  /**
+   * 快速加入：直接用 default_channel 加入 imageset，不需要展開頻道列表。
+   * 挑選邏輯：
+   *  1. 若已有 package 快取 → 找 head_version 並鎖版
+   *  2. 否則 → 只帶 channel 名稱，不鎖版（oc-mirror 自動取最新）
+   */
+  const handleQuickAdd = async (op: CatalogOperator) => {
+    setQuickAddState(prev => ({ ...prev, [op.name]: 'adding' }))
+    try {
+      // 從 channelCache 取已知 head_version（若有）
+      const cached = channelCache[op.name]
+      let version = ''
+      if (cached && !cached.loading && cached.channels.length > 0) {
+        const best = cached.channels.find(c => c.channel === op.default_channel)
+          ?? cached.channels.find(c => c.channel.includes('stable'))
+          ?? cached.channels[0]
+        version = best?.head_version ?? ''
+      }
+      await addOperator(op.name, op.default_channel, version, catalogTag)
+      setQuickAddState(prev => ({ ...prev, [op.name]: 'added' }))
+      onAdded()
+    } catch {
+      setQuickAddState(prev => ({ ...prev, [op.name]: 'error' }))
+      setTimeout(() => setQuickAddState(prev => ({ ...prev, [op.name]: 'idle' })), 3000)
     }
   }
 
@@ -436,7 +647,13 @@ function CatalogBrowser({ catalogTag, pullSecret, onAdded }: {
         const { data } = await searchOperator(opName, ocpVersion, pullSecret)
         setChannelCache(prev => ({
           ...prev,
-          [opName]: { loading: false, channels: data.channels, error: data.error },
+          [opName]: {
+            loading: false,
+            channels: data.channels,
+            error: data.error,
+            from_cache: data.from_cache,
+            cached_at: data.cached_at,
+          },
         }))
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
@@ -494,7 +711,7 @@ function CatalogBrowser({ catalogTag, pullSecret, onAdded }: {
               </select>
             </div>
             <button
-              onClick={handleLoad}
+              onClick={() => handleLoad()}
               disabled={loading}
               className="flex items-center gap-2 px-4 py-2 bg-ocp-red/80 hover:bg-ocp-red disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
             >
@@ -535,6 +752,13 @@ function CatalogBrowser({ catalogTag, pullSecret, onAdded }: {
 
           {result?.success && (
             <div className="mt-4 space-y-3">
+              {/* 快取標記 */}
+              {result.from_cache && result.cached_at && (
+                <CacheBadge
+                  cachedAt={result.cached_at}
+                  onForceRefresh={() => handleLoad(true)}
+                />
+              )}
               {/* 篩選列 */}
               <div className="flex items-center gap-3">
                 <div className="relative flex-1 max-w-md">
@@ -581,19 +805,45 @@ function CatalogBrowser({ catalogTag, pullSecret, onAdded }: {
                           </td>
                           {/* 操作 */}
                           <td className="px-4 py-2.5 align-top text-right">
-                            <button
-                              onClick={() => handleExpandRow(op.name)}
-                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                                expanded === op.name
-                                  ? 'bg-ocp-red/20 text-ocp-red border border-ocp-red/40'
-                                  : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
-                              }`}
-                            >
-                              {expanded === op.name
-                                ? <><ChevronUp size={11} />收起</>
-                                : <><Plus size={11} />加入</>
-                              }
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              {/* 快速加入 */}
+                              {(() => {
+                                const st = quickAddState[op.name] ?? 'idle'
+                                return (
+                                  <button
+                                    onClick={() => handleQuickAdd(op)}
+                                    disabled={st === 'adding' || st === 'added'}
+                                    title={`快速加入（channel: ${op.default_channel}）`}
+                                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                                      st === 'added'
+                                        ? 'bg-green-800/40 text-green-300 cursor-default'
+                                        : st === 'error'
+                                        ? 'bg-red-800/40 text-red-300'
+                                        : st === 'adding'
+                                        ? 'bg-slate-700 text-slate-400 cursor-wait'
+                                        : 'bg-ocp-red/80 hover:bg-ocp-red text-white'
+                                    }`}
+                                  >
+                                    {st === 'added' ? <><Check size={11} />已加入</>
+                                      : st === 'adding' ? <><RefreshCw size={11} className="animate-spin" />加入中</>
+                                      : st === 'error' ? <>✗ 失敗</>
+                                      : <><Plus size={11} />加入</>}
+                                  </button>
+                                )
+                              })()}
+                              {/* 查看頻道詳細 */}
+                              <button
+                                onClick={() => handleExpandRow(op.name)}
+                                title="查看所有頻道與版本"
+                                className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                                  expanded === op.name
+                                    ? 'bg-slate-600 text-white'
+                                    : 'bg-slate-700/60 hover:bg-slate-600 text-slate-400 hover:text-white'
+                                }`}
+                              >
+                                {expanded === op.name ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -613,12 +863,29 @@ function CatalogBrowser({ catalogTag, pullSecret, onAdded }: {
                                   {channelCache[op.name]?.error}
                                 </div>
                               ) : (channelCache[op.name]?.channels?.length ?? 0) > 0 ? (
-                                <SearchResultList
-                                  channels={channelCache[op.name].channels}
-                                  operatorName={op.name}
-                                  catalogTag={catalogTag}
-                                  onAdded={onAdded}
-                                />
+                                <>
+                                  {channelCache[op.name]?.from_cache && channelCache[op.name]?.cached_at && (
+                                    <div className="mb-2">
+                                      <CacheBadge
+                                        cachedAt={channelCache[op.name].cached_at!}
+                                        onForceRefresh={async () => {
+                                          setChannelCache(prev => ({ ...prev, [op.name]: { loading: true, channels: [] } }))
+                                          const { data } = await searchOperator(op.name, ocpVersion, pullSecret, true)
+                                          setChannelCache(prev => ({
+                                            ...prev,
+                                            [op.name]: { loading: false, channels: data.channels, error: data.error, from_cache: false },
+                                          }))
+                                        }}
+                                      />
+                                    </div>
+                                  )}
+                                  <SearchResultList
+                                    channels={channelCache[op.name].channels}
+                                    operatorName={op.name}
+                                    catalogTag={catalogTag}
+                                    onAdded={onAdded}
+                                  />
+                                </>
                               ) : (
                                 <div className="text-slate-500 text-xs py-1">尚無頻道資訊</div>
                               )}
@@ -808,6 +1075,9 @@ export default function ImagesetManager() {
 
       {/* Catalog 瀏覽器 */}
       <CatalogBrowser catalogTag={catalogTag} pullSecret={pullSecret} onAdded={loadImageset} />
+
+      {/* 快取管理 */}
+      <CachePanel />
 
       {/* Additional Images 唯讀顯示 */}
       {imageset?.mirror.additionalImages && imageset.mirror.additionalImages.length > 0 && (

@@ -1,4 +1,7 @@
+import asyncio
+import logging
 from fastapi import FastAPI, HTTPException, BackgroundTasks
+from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -17,10 +20,13 @@ from imageset import (
     list_catalog_operators,
 )
 from mirror_runner import run_oc_mirror, mirror_state, mirror_log_generator
+from operator_cache import get_stats, clear_cache, get_catalog
 from tools import (
     get_tools_status, start_tool_download,
     tools_log_generator, download_state, TOOL_DEFS,
 )
+
+logger = logging.getLogger("ocp-ui")
 
 app = FastAPI(
     title="OCP Automation API",
@@ -35,6 +41,48 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ──────────────────────────────────────────
+# Startup：背景預熱 catalog 快取
+# ──────────────────────────────────────────
+
+@app.on_event("startup")
+async def startup_prewarm():
+    """
+    啟動後自動在背景跑一次 oc-mirror list operators（catalog 整體清單）。
+    - 已有快取 → 跳過，不重複查詢
+    - 無快取 → 背景執行，成功後寫入 SQLite
+    - 任何錯誤（oc-mirror 未安裝、網路問題）都靜默忽略
+    OCP 版本從 site.yml 讀取，pull secret 預設 /root/pull-secret。
+    """
+    async def _prewarm():
+        try:
+            # 讀取 OCP 版本
+            config = read_config()
+            parts = config.ocp_release.split(".")
+            ocp_version = f"{parts[0]}.{parts[1]}" if len(parts) >= 2 else "4.20"
+        except Exception:
+            ocp_version = "4.20"
+
+        pull_secret = "/root/pull-secret"
+
+        # 已有快取則跳過
+        if get_catalog(ocp_version):
+            logger.info(f"[prewarm] catalog v{ocp_version} 已有快取，跳過")
+            return
+
+        logger.info(f"[prewarm] 開始背景預熱 catalog v{ocp_version}…")
+        try:
+            result = await list_catalog_operators(ocp_version, pull_secret, force_refresh=False)
+            if result.get("success"):
+                logger.info(f"[prewarm] 完成，共 {result.get('total', 0)} 個 operators")
+            else:
+                logger.warning(f"[prewarm] 失敗：{result.get('error', '未知錯誤')}")
+        except Exception as exc:
+            logger.warning(f"[prewarm] 例外：{exc}")
+
+    asyncio.create_task(_prewarm())
 
 
 # ──────────────────────────────────────────
@@ -142,12 +190,24 @@ def put_imageset(data: dict):
 async def get_catalog_operators(
     ocp_version: str = "4.20",
     pull_secret: str = "/root/pull-secret",
+    force_refresh: bool = False,
 ):
-    """
-    列出指定 catalog 中所有可用的 Operators（oc-mirror --v1 list operators）。
-    需提供 Pull Secret 路徑以存取 registry.redhat.io。
-    """
-    return await list_catalog_operators(ocp_version, pull_secret)
+    """列出指定 catalog 所有可用 Operators。優先回傳快取；force_refresh=true 強制重新查詢。"""
+    return await list_catalog_operators(ocp_version, pull_secret, force_refresh)
+
+
+@app.get("/api/operators/cache")
+def get_operator_cache():
+    """取得本地快取統計（catalog 快取數、package 快取數、各筆快取時間）。"""
+    return get_stats()
+
+
+@app.delete("/api/operators/cache")
+def delete_operator_cache(ocp_version: Optional[str] = None):
+    """清除快取。ocp_version 指定時只清該版本，否則清除全部。"""
+    count = clear_cache(ocp_version)
+    msg = f"已清除 {count} 筆快取" + (f"（v{ocp_version}）" if ocp_version else "（全部）")
+    return {"message": msg, "deleted": count}
 
 
 @app.post("/api/imageset/operators/search", response_model=OperatorSearchResult)
@@ -160,6 +220,7 @@ async def search_operator_versions(req: OperatorSearchRequest):
         operator_name=req.operator_name,
         ocp_version=req.ocp_version,
         pull_secret=req.pull_secret,
+        force_refresh=req.force_refresh,
     )
     return result
 

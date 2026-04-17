@@ -105,6 +105,8 @@ export interface OperatorSearchResult {
   error?: string
   raw?: string
   channels: OperatorChannelResult[]
+  from_cache?: boolean
+  cached_at?: string
 }
 
 export interface CatalogOperator {
@@ -119,6 +121,23 @@ export interface CatalogListResult {
   catalog?: string
   total: number
   operators: CatalogOperator[]
+  from_cache?: boolean
+  cached_at?: string
+}
+
+export interface CacheEntry {
+  ocp_version: string
+  cached_at: string
+  operator_count?: number
+  package_name?: string
+}
+
+export interface CacheStats {
+  catalog_count: number
+  package_count: number
+  catalog_entries: CacheEntry[]
+  package_entries: CacheEntry[]
+  db_path: string
 }
 
 export type PhaseKey = 'prep' | 'install' | 'post' | 'operators'

@@ -32,11 +32,12 @@ export const searchOperator = (
   operator_name: string,
   ocp_version: string,
   pull_secret = '/root/pull-secret',
+  force_refresh = false,
 ) =>
   api.post<import('../types').OperatorSearchResult>(
     '/api/imageset/operators/search',
-    { operator_name, ocp_version, pull_secret },
-    { timeout: 0 },  // 無限等待，oc-mirror 可能很慢
+    { operator_name, ocp_version, pull_secret, force_refresh },
+    { timeout: 0 },
   )
 
 export const addOperator = (
@@ -61,10 +62,22 @@ export const removeOperator = (operator_name: string, catalog_tag: string = 'v4.
 export const exportImagesetYaml = () =>
   api.get<{ yaml: string }>('/api/imageset/export')
 
-export const listCatalogOperators = (ocp_version: string, pull_secret = '/root/pull-secret') =>
+export const listCatalogOperators = (
+  ocp_version: string,
+  pull_secret = '/root/pull-secret',
+  force_refresh = false,
+) =>
   api.get<import('../types').CatalogListResult>('/api/operators/catalog', {
-    params: { ocp_version, pull_secret },
-    timeout: 0,  // oc-mirror 拉取 catalog index 可能需要很長時間
+    params: { ocp_version, pull_secret, force_refresh },
+    timeout: 0,
+  })
+
+export const getCacheStats = () =>
+  api.get<import('../types').CacheStats>('/api/operators/cache')
+
+export const clearOperatorCache = (ocp_version?: string) =>
+  api.delete<{ message: string; deleted: number }>('/api/operators/cache', {
+    params: ocp_version ? { ocp_version } : undefined,
   })
 
 // CLI 工具下載
