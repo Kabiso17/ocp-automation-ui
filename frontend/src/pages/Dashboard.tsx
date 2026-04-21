@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle, XCircle, Loader2, Clock, AlertTriangle } from 'lucide-react'
-import { getPhaseStatuses, validateConfig } from '../api/client'
-import type { PhaseStatus, ValidationResult } from '../types'
+import { CheckCircle, XCircle, Loader2, Clock, AlertTriangle, Database, Terminal, ShieldCheck } from 'lucide-react'
+import { getPhaseStatuses, validateConfig, getCacheStats, getToolsStatus } from '../api/client'
+import type { PhaseStatus, ValidationResult, CacheStats, ToolStatus } from '../types'
 import { PHASES } from '../types'
 
 const StatusIcon = ({ status }: { status: string }) => {
@@ -33,23 +33,34 @@ function formatDuration(start: string | null, end: string | null): string {
 export default function Dashboard() {
   const [statuses, setStatuses] = useState<Record<string, PhaseStatus>>({})
   const [validation, setValidation] = useState<ValidationResult | null>(null)
+  const [cacheStats, setCacheStats] = useState<CacheStats | null>(null)
+  const [toolsStatus, setToolsStatus] = useState<Record<string, ToolStatus>>({})
 
   useEffect(() => {
     const fetchAll = async () => {
       try {
-        const [s, v] = await Promise.all([getPhaseStatuses(), validateConfig()])
+        const [s, v, c, t] = await Promise.all([
+          getPhaseStatuses(),
+          validateConfig(),
+          getCacheStats(),
+          getToolsStatus()
+        ])
         setStatuses(s.data)
         setValidation(v.data)
+        setCacheStats(c.data)
+        setToolsStatus(t.data)
       } catch {}
     }
     fetchAll()
-    const id = setInterval(fetchAll, 3000)
+    const id = setInterval(fetchAll, 5000)
     return () => clearInterval(id)
   }, [])
 
   const allSuccess = PHASES.every(p => statuses[p.key]?.status === 'success')
   const hasRunning = PHASES.some(p => statuses[p.key]?.status === 'running')
   const hasFailed  = PHASES.some(p => statuses[p.key]?.status === 'failed')
+
+  const installedTools = Object.values(toolsStatus).filter(t => t.installed)
 
   return (
     <div className="p-8 space-y-8">
@@ -59,26 +70,50 @@ export default function Dashboard() {
         <p className="text-slate-400 mt-1">OpenShift 安裝自動化管理介面</p>
       </div>
 
-      {/* Overall status */}
-      <div className={`rounded-xl border p-5 flex items-center gap-4 ${
-        allSuccess  ? 'border-green-700 bg-green-950' :
-        hasFailed   ? 'border-red-700 bg-red-950' :
-        hasRunning  ? 'border-blue-700 bg-blue-950' :
-        'border-slate-700 bg-slate-800'
-      }`}>
-        {allSuccess  ? <CheckCircle size={28} className="text-green-400" /> :
-         hasFailed   ? <XCircle size={28} className="text-red-400" /> :
-         hasRunning  ? <Loader2 size={28} className="text-blue-400 animate-spin" /> :
-                       <Clock size={28} className="text-slate-400" />}
-        <div>
-          <div className="text-white font-semibold">
-            {allSuccess  ? '所有 Phase 已完成' :
-             hasFailed   ? '有 Phase 執行失敗' :
-             hasRunning  ? '正在執行中...' :
-             '尚未開始'}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Overall status */}
+        <div className={`rounded-xl border p-5 flex items-center gap-4 lg:col-span-1 ${
+          allSuccess  ? 'border-green-700 bg-green-950' :
+          hasFailed   ? 'border-red-700 bg-red-950' :
+          hasRunning  ? 'border-blue-700 bg-blue-950' :
+          'border-slate-700 bg-slate-800'
+        }`}>
+          {allSuccess  ? <CheckCircle size={32} className="text-green-400" /> :
+           hasFailed   ? <XCircle size={32} className="text-red-400" /> :
+           hasRunning  ? <Loader2 size={32} className="text-blue-400 animate-spin" /> :
+                         <Clock size={32} className="text-slate-400" />}
+          <div>
+            <div className="text-white font-semibold text-lg">
+              {allSuccess  ? '所有 Phase 已完成' :
+               hasFailed   ? '有 Phase 執行失敗' :
+               hasRunning  ? '正在執行中...' :
+               '尚未開始'}
+            </div>
+            <div className="text-sm text-slate-400 mt-0.5">
+              {PHASES.filter(p => statuses[p.key]?.status === 'success').length} / {PHASES.length} 個 Phase 完成
+            </div>
           </div>
-          <div className="text-sm text-slate-400 mt-0.5">
-            {PHASES.filter(p => statuses[p.key]?.status === 'success').length} / {PHASES.length} 個 Phase 完成
+        </div>
+
+        {/* Cache Summary */}
+        <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-5 flex items-center gap-4">
+          <Database size={32} className="text-purple-400" />
+          <div>
+            <div className="text-white font-semibold">Operator 快取</div>
+            <div className="text-sm text-slate-400 mt-0.5">
+              {cacheStats?.catalog_count ?? 0} 個 Catalog, {cacheStats?.package_count ?? 0} 個 Package
+            </div>
+          </div>
+        </div>
+
+        {/* Tools Summary */}
+        <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-5 flex items-center gap-4">
+          <Terminal size={32} className="text-orange-400" />
+          <div>
+            <div className="text-white font-semibold">CLI 工具狀態</div>
+            <div className="text-sm text-slate-400 mt-0.5">
+              {installedTools.length} / {Object.keys(toolsStatus).length} 個工具已安裝
+            </div>
           </div>
         </div>
       </div>
@@ -98,7 +133,10 @@ export default function Dashboard() {
 
       {/* Phase grid */}
       <div>
-        <h2 className="text-slate-300 text-sm font-semibold uppercase tracking-wider mb-4">安裝 Phases</h2>
+        <h2 className="text-slate-300 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
+          <ShieldCheck size={16} />
+          安裝 Phases
+        </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           {PHASES.map((phase) => {
             const s = statuses[phase.key]

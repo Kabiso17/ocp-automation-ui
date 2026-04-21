@@ -15,36 +15,31 @@
 
 ### 🟡 中優先
 
-- [ ] **快取 TTL 機制**
-  - 目前快取永不過期，operator 版本資訊可能過時
-  - 建議在 `catalog_cache` 和 `package_cache` 加入 `expires_at` 欄位
-  - 預設 TTL：catalog 清單 7 天，package 頻道資訊 3 天
+- [ ] **快取跨版本搜尋**
+  - 目前快取管理面板只顯示已快取的版本，考慮加「搜尋其他版本快取」功能
 
-- [ ] **快取預熱（背景批次查詢）**
-  - catalog 載入完成後，可選擇背景批次查詢所有 package 的 channel 資訊
-  - 這樣展開每一列就能瞬間回傳，不需再等 oc-mirror
-  - 實作：新增 `POST /api/operators/cache/warmup` 端點，SSE 串流預熱進度
+### 🟢 低優先 / 改善
+
+- [x] **快取 TTL 機制**
+  - 已實作 `expires_at` 欄位與自動過期邏輯
+  - Catalog 7 天，Package 3 天
+
+- [x] **快取預熱（背景批次查詢）**
+  - 已新增 `POST /api/operators/cache/warmup` 端點
+  - 支援 SSE 串流顯示進度，並限制並行數為 1
+
+- [x] **oc-mirror mirror_runner.py：pull secret 支援**
+  - 已支援 `REGISTRY_AUTH_FILE` 環境變數傳入 pull secret
+
+- [x] **Dashboard 狀態整合**
+  - 已在 Dashboard 加入「快取狀態」和「工具安裝狀態」摘要卡片
+
+- [x] **CI 觸發條件**
+  - 已加入 `main` 分支觸發條件
 
 - [ ] **PR 合併到 main**
   - 分支：`claude/add-operator-download-VkxUl`
   - PR #2 已開，待 review 後合併
-
-### 🟢 低優先 / 改善
-
-- [ ] **oc-mirror mirror_runner.py：pull secret 支援**
-  - 目前 `run_oc_mirror()` 沒有傳入 pull secret
-  - 實際執行 oc-mirror --v2 mirror 時也需要認證
-  - 建議從 UI 的 pull secret 路徑欄位取值並傳入
-
-- [ ] **Dashboard 狀態整合**
-  - Dashboard 頁面顯示 Phase 狀態，可考慮也加入「快取狀態」和「工具安裝狀態」摘要
-
-- [ ] **快取跨版本搜尋**
-  - 目前快取管理面板只顯示已快取的版本，考慮加「搜尋其他版本快取」功能
-
-- [ ] **CI 觸發條件**
-  - 目前 CI 只在 `release` 分支觸發（`.github/workflows/ci.yml`）
-  - 考慮是否也要在 PR 時觸發
 
 ## 已完成
 
@@ -64,3 +59,4 @@
 - [x] 快取管理面板（統計、按版本清除、全部清除）
 - [x] 移除不支援的 --image-timeout / --v1 / --registry-config flag
 - [x] 改用 REGISTRY_AUTH_FILE 環境變數傳入 pull secret
+

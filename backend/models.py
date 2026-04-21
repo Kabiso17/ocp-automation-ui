@@ -137,6 +137,7 @@ class RemoveOperatorRequest(BaseModel):
 class MirrorRunRequest(BaseModel):
     destination: str  # e.g. docker://registry:5000 or file:///output/path
     workspace: str = "/tmp/oc-mirror-workspace"
+    pull_secret: str = "/root/pull-secret"
 
 
 class MirrorStatus(BaseModel):

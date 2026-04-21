@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from typing import Optional
@@ -20,7 +21,7 @@ from imageset import (
     list_catalog_operators,
 )
 from mirror_runner import run_oc_mirror, mirror_state, mirror_log_generator
-from operator_cache import get_stats, clear_cache, get_catalog
+from operator_cache import get_stats, clear_cache, get_catalog, get_package
 from tools import (
     get_tools_status, start_tool_download,
     tools_log_generator, download_state, TOOL_DEFS,
@@ -210,6 +211,59 @@ def delete_operator_cache(ocp_version: Optional[str] = None):
     return {"message": msg, "deleted": count}
 
 
+async def warmup_generator(ocp_version: str, pull_secret: str):
+    """SSE Generator: 預熱指定版本的所有 Operator 快取。"""
+    # 1. 取得 catalog 清單
+    result = await list_catalog_operators(ocp_version, pull_secret)
+    if not result.get("success"):
+        yield f"data: {json.dumps({'type': 'error', 'message': result.get('error')}, ensure_ascii=False)}\n\n"
+        return
+
+    operators = result.get("operators", [])
+    total = len(operators)
+    yield f"data: {json.dumps({'type': 'start', 'total': total}, ensure_ascii=False)}\n\n"
+
+    # 使用 Semaphore 限制並行數（oc-mirror 很吃資源，建議設為 1）
+    sem = asyncio.Semaphore(1)
+
+    async def _fetch(op_name, index):
+        async with sem:
+            # 檢查是否已有快取（不重複查詢）
+            if get_package(ocp_version, op_name):
+                return {"type": "skip", "name": op_name, "index": index}
+            
+            res = await search_operator(op_name, ocp_version, pull_secret=pull_secret)
+            if res.get("success"):
+                return {"type": "done", "name": op_name, "index": index}
+            else:
+                return {"type": "fail", "name": op_name, "index": index, "error": res.get("error")}
+
+    for i, op in enumerate(operators):
+        op_name = op["name"]
+        msg = await _fetch(op_name, i + 1)
+        yield f"data: {json.dumps(msg, ensure_ascii=False)}\n\n"
+        # 稍微喘息一下
+        await asyncio.sleep(0.1)
+
+    yield f"data: {json.dumps({'type': 'complete'}, ensure_ascii=False)}\n\n"
+
+
+@app.post("/api/operators/cache/warmup")
+async def start_cache_warmup(ocp_version: str = "4.20", pull_secret: str = "/root/pull-secret"):
+    """
+    觸發快取預熱。回傳 SSE 串流。
+    注意：這會耗費大量時間與頻寬，建議在背景執行。
+    """
+    return StreamingResponse(
+        warmup_generator(ocp_version, pull_secret),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @app.post("/api/imageset/operators/search", response_model=OperatorSearchResult)
 async def search_operator_versions(req: OperatorSearchRequest):
     """
@@ -267,7 +321,7 @@ async def start_mirror_download(req: MirrorRunRequest, background_tasks: Backgro
     """啟動 oc-mirror 下載流程。"""
     if mirror_state["status"] == "running":
         raise HTTPException(status_code=409, detail="oc-mirror 正在執行中，請等待完成後再試")
-    background_tasks.add_task(run_oc_mirror, req.destination, req.workspace)
+    background_tasks.add_task(run_oc_mirror, req.destination, req.workspace, req.pull_secret)
     return {"message": "oc-mirror 下載已開始", "destination": req.destination}
 
 
