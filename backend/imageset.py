@@ -355,8 +355,10 @@ def add_or_update_operator(
 ) -> dict:
     """
     在 imageset dict 中新增或更新一個 operator package。
-    version 為空字串時不鎖定版本（oc-mirror 自動取最新），
-    適合「快速加入」場景。
+    正常情況 version 應為該頻道的 head_version，寫入：
+        minVersion: <head_version>
+        maxVersion: <head_version>
+    version="" 僅作為查詢 API 失敗時的最後 fallback，不是設計意圖。
     """
     catalog_url = f"registry.redhat.io/redhat/redhat-operator-index:{catalog_tag}"
     operators_list: List[dict] = imageset["mirror"].get("operators", [])

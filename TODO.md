@@ -20,30 +20,21 @@
 
 ### 🟢 低優先 / 改善
 
-- [x] **快取 TTL 機制**
-  - 已實作 `expires_at` 欄位與自動過期邏輯
-  - Catalog 7 天，Package 3 天
-
-- [x] **快取預熱（背景批次查詢）**
-  - 已新增 `POST /api/operators/cache/warmup` 端點
-  - 支援 SSE 串流顯示進度，並限制並行數為 1
-
-- [x] **oc-mirror mirror_runner.py：pull secret 支援**
-  - 已支援 `REGISTRY_AUTH_FILE` 環境變數傳入 pull secret
-
-- [x] **Dashboard 狀態整合**
-  - 已在 Dashboard 加入「快取狀態」和「工具安裝狀態」摘要卡片
-
-- [x] **CI 觸發條件**
-  - 已加入 `main` 分支觸發條件
-
-- [ ] **PR 合併到 main**
-  - 分支：`claude/add-operator-download-VkxUl`
-  - PR #2 已開，待 review 後合併
+- [ ] **CatalogBrowser 批次快速加入**
+  - 目前只能逐一點「+」加入，考慮加「全選 / 多選後批次加入」功能
 
 ## 已完成
 
-- [x] CatalogBrowser "+" 快速加入（用 default_channel，不鎖版本）
+- [x] 快取 TTL 機制（expires_at，catalog 7 天、package 3 天，含舊 DB 自動 migration）
+- [x] 快取預熱端點 `POST /api/operators/cache/warmup`（SSE 串流、並行限制 1）
+- [x] Dashboard 加入快取狀態 + CLI 工具安裝狀態摘要卡片
+- [x] CI 觸發條件加入 main 分支
+- [x] 修復 warmup_generator 遺漏 `import json` 與 `get_package`
+- [x] 修復 sqlite3.Row 不能 `.get()` → 改用 `row["column"]` bracket 存取
+- [x] CLI 工具安裝目錄固定為 `/usr/local/bin`（移除 Windows C:\Tools 覆蓋邏輯）
+- [x] CatalogBrowser「+」快速加入自動填入最新版本（minVersion = maxVersion = head_version）
+- [x] CatalogBrowser 支援多列同時展開（expanded 改為 Set<string>）
+- [x] CatalogBrowser "+" 快速加入（用 default_channel）
 - [x] CatalogBrowser 拆成「加入」和「▾ 查看頻道」兩個按鈕
 - [x] 啟動時背景自動預熱 catalog 快取（從 site.yml 讀取 ocp_version）
 - [x] add_or_update_operator 支援空版本（不鎖版本，oc-mirror 自動取最新）
@@ -59,4 +50,4 @@
 - [x] 快取管理面板（統計、按版本清除、全部清除）
 - [x] 移除不支援的 --image-timeout / --v1 / --registry-config flag
 - [x] 改用 REGISTRY_AUTH_FILE 環境變數傳入 pull secret
-
+- [x] oc-mirror mirror_runner.py 支援 pull secret（REGISTRY_AUTH_FILE）
