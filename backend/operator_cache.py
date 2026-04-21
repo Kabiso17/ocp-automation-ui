@@ -81,7 +81,7 @@ def get_catalog(ocp_version: str) -> Optional[Dict[str, Any]]:
         return None
 
     # 檢查過期
-    expires_at = row.get("expires_at")
+    expires_at = row["expires_at"]
     if expires_at:
         try:
             if datetime.now() > datetime.fromisoformat(expires_at):
@@ -131,7 +131,7 @@ def get_package(ocp_version: str, package_name: str) -> Optional[Dict[str, Any]]
         return None
 
     # 檢查過期
-    expires_at = row.get("expires_at")
+    expires_at = row["expires_at"]
     if expires_at:
         try:
             if datetime.now() > datetime.fromisoformat(expires_at):

@@ -584,7 +584,7 @@ function CatalogBrowser({ catalogTag, pullSecret, onAdded }: {
     cached_at?: string
   } | null>(null)
   const [filter, setFilter] = useState('')
-  const [expanded, setExpanded] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [channelCache, setChannelCache] = useState<
     Record<string, { loading: boolean; channels: OperatorChannelResult[]; error?: string; from_cache?: boolean; cached_at?: string }>
   >({})
@@ -595,7 +595,7 @@ function CatalogBrowser({ catalogTag, pullSecret, onAdded }: {
     setLoading(true)
     setResult(null)
     setFilter('')
-    setExpanded(null)
+    setExpanded(new Set())
     if (forceRefresh) setChannelCache({})
     try {
       const { data } = await listCatalogOperators(ocpVersion, pullSecret, forceRefresh)
@@ -659,11 +659,11 @@ function CatalogBrowser({ catalogTag, pullSecret, onAdded }: {
   }
 
   const handleExpandRow = async (opName: string) => {
-    if (expanded === opName) {
-      setExpanded(null)
+    if (expanded.has(opName)) {
+      setExpanded(prev => { const s = new Set(prev); s.delete(opName); return s })
       return
     }
-    setExpanded(opName)
+    setExpanded(prev => new Set([...prev, opName]))
     if (!channelCache[opName]) {
       setChannelCache(prev => ({ ...prev, [opName]: { loading: true, channels: [] } }))
       try {
@@ -859,12 +859,12 @@ function CatalogBrowser({ catalogTag, pullSecret, onAdded }: {
                                 onClick={() => handleExpandRow(op.name)}
                                 title="查看所有頻道與版本"
                                 className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
-                                  expanded === op.name
+                                  expanded.has(op.name)
                                     ? 'bg-slate-600 text-white'
                                     : 'bg-slate-700/60 hover:bg-slate-600 text-slate-400 hover:text-white'
                                 }`}
                               >
-                                {expanded === op.name ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                                {expanded.has(op.name) ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
                               </button>
                             </div>
                           </td>
@@ -872,7 +872,7 @@ function CatalogBrowser({ catalogTag, pullSecret, onAdded }: {
                       ))}
                       {/* 展開的頻道列 */}
                       {filtered.map(op =>
-                        expanded === op.name ? (
+                        expanded.has(op.name) ? (
                           <tr key={`${op.name}__expanded`} className="border-t border-slate-700/60 bg-slate-900/60">
                             <td colSpan={4} className="px-6 py-3">
                               {channelCache[op.name]?.loading ? (
