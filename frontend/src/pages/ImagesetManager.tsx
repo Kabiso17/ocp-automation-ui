@@ -617,16 +617,39 @@ function CatalogBrowser({ catalogTag, pullSecret, onAdded }: {
   const handleQuickAdd = async (op: CatalogOperator) => {
     setQuickAddState(prev => ({ ...prev, [op.name]: 'adding' }))
     try {
-      // 從 channelCache 取已知 head_version（若有）
-      const cached = channelCache[op.name]
       let version = ''
+      let channel = op.default_channel
+
+      // 優先從已展開的 channelCache 取 head_version
+      const cached = channelCache[op.name]
       if (cached && !cached.loading && cached.channels.length > 0) {
         const best = cached.channels.find(c => c.channel === op.default_channel)
           ?? cached.channels.find(c => c.channel.includes('stable'))
           ?? cached.channels[0]
         version = best?.head_version ?? ''
+        channel = best?.channel ?? op.default_channel
+      } else {
+        // 沒有展開過 → 呼叫 API（優先走 SQLite cache，通常很快）
+        try {
+          const { data } = await searchOperator(op.name, ocpVersion, pullSecret)
+          if (data.success && data.channels.length > 0) {
+            const best = data.channels.find((c: OperatorChannelResult) => c.channel === op.default_channel)
+              ?? data.channels.find((c: OperatorChannelResult) => c.channel.includes('stable'))
+              ?? data.channels[0]
+            version = best?.head_version ?? ''
+            channel = best?.channel ?? op.default_channel
+            // 順便填入 channelCache，展開時不需再查
+            setChannelCache(prev => ({
+              ...prev,
+              [op.name]: { loading: false, channels: data.channels, from_cache: data.from_cache, cached_at: data.cached_at },
+            }))
+          }
+        } catch {
+          // 查詢失敗時 fallback：不鎖版本，讓 oc-mirror 自動取最新
+        }
       }
-      await addOperator(op.name, op.default_channel, version, catalogTag)
+
+      await addOperator(op.name, channel, version, catalogTag)
       setQuickAddState(prev => ({ ...prev, [op.name]: 'added' }))
       onAdded()
     } catch {
