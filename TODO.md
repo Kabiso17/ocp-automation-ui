@@ -20,6 +20,12 @@
 
 ### 🟢 低優先 / 改善
 
+- [ ] **加入 operator 時自動取版本並寫入快取**
+  - 位置：`ImagesetManager.tsx` — `SearchResultList.handleAdd`（搜尋面板的「加入 ImageSet」按鈕）
+  - 目前行為：直接用搜尋結果中的 `head_version` 呼叫 `addOperator`，不保證版本資訊已存入 SQLite
+  - 期望行為：點擊加入時，若該 operator 尚未在 SQLite package_cache 中，先呼叫 `searchOperator` 取得最新版本並寫入快取，再加入 imageset
+  - `handleQuickAdd`（CatalogBrowser「+」按鈕）已有此邏輯，搜尋面板那條路徑尚未補齊
+
 - [ ] **CatalogBrowser 批次快速加入**
   - 目前只能逐一點「+」加入，考慮加「全選 / 多選後批次加入」功能
 
