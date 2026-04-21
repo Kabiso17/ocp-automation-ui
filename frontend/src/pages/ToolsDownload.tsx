@@ -215,7 +215,7 @@ export default function ToolsDownload() {
     started_at: null, finished_at: null, log_lines: 0,
   })
   const [selectedVersion, setSelectedVersion] = useState(OCP_VERSIONS[0])
-  const [installDir, setInstallDir]           = useState('/usr/local/bin')
+  const installDir = '/usr/local/bin'
   const [logTrigger, setLogTrigger]           = useState(0)
   const [toast, setToast]                     = useState<string | null>(null)
   const [refreshing, setRefreshing]           = useState(false)
@@ -237,10 +237,6 @@ export default function ToolsDownload() {
   useEffect(() => {
     getConfig().then(({ data }) => {
       if (data.ocp_release) setSelectedVersion(data.ocp_release)
-      // Windows 提示改用 C:\Tools
-      if (navigator.userAgent.includes('Windows')) {
-        setInstallDir('C:\\Tools')
-      }
     }).catch(() => {})
     loadStatus()
   }, [loadStatus])
@@ -357,20 +353,16 @@ export default function ToolsDownload() {
             </p>
           </div>
 
-          {/* 安裝目錄 */}
+          {/* 安裝目錄（固定） */}
           <div>
             <label className="block text-xs text-slate-400 mb-1.5 flex items-center gap-1">
               <FolderOpen size={11} /> 安裝目錄
             </label>
-            <input
-              type="text"
-              value={installDir}
-              onChange={e => setInstallDir(e.target.value)}
-              disabled={isRunning}
-              className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-ocp-red font-mono disabled:opacity-50"
-            />
+            <div className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-400 font-mono">
+              {installDir}
+            </div>
             <p className="text-xs text-slate-500 mt-1">
-              請確認此目錄已加入系統 PATH 環境變數
+              固定安裝至 /usr/local/bin（已在 PATH 中）
             </p>
           </div>
         </div>
